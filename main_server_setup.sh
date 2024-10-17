@@ -1,8 +1,10 @@
 #!/bin/bash
 
+set -e  # Exit immediately if a command exits with a non-zero status.
+
 # Fungsi untuk menangani kesalahan
 handle_error() {
-    echo "Error: $1"
+    echo "Error: $1" >&2
     exit 1
 }
 
@@ -16,84 +18,137 @@ install_postgresql() {
 # Fungsi untuk membuat database dan user
 create_db_and_user() {
     echo "Creating database mydb and user..."
-    sudo -u postgres psql -c "CREATE DATABASE mydb;" || handle_error "Failed to create database mydb"
-    sudo -u postgres psql -c "CREATE USER myuser WITH ENCRYPTED PASSWORD 'mypassword';" || handle_error "Failed to create user myuser"
-    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;" || handle_error "Failed to grant privileges to myuser"
+    sudo -u postgres psql << EOF
+CREATE DATABASE mydb;
+CREATE USER myuser WITH ENCRYPTED PASSWORD 'mypassword';
+GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;
+EOF
 }
 
-# Fungsi untuk mengkonfigurasi PostgreSQL
+# Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
 configure_postgresql() {
-    echo "Configuring PostgreSQL..."
-    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/14/main/postgresql.conf
-    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/14/main/pg_hba.conf
+    echo "Configuring PostgreSQL for remote access..."
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/12/main/postgresql.conf
+    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/12/main/pg_hba.conf
     sudo systemctl restart postgresql || handle_error "Failed to restart PostgreSQL"
 }
 
 # Fungsi untuk setup Foreign Data Wrapper
 setup_fdw() {
     echo "Setting up Foreign Data Wrapper..."
-    sudo -u postgres psql -d mydb -c "CREATE EXTENSION postgres_fdw;" || handle_error "Failed to create postgres_fdw extension"
-    sudo -u postgres psql -d mydb -c "CREATE SERVER audit_server FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'audit_server_ip', port '5432', dbname 'audit_db');" || handle_error "Failed to create foreign server"
-    sudo -u postgres psql -d mydb -c "CREATE USER MAPPING FOR myuser SERVER audit_server OPTIONS (user 'audit_user', password 'audit_password');" || handle_error "Failed to create user mapping"
-    sudo -u postgres psql -d mydb -c "CREATE FOREIGN TABLE audit_log (
-        id INTEGER,
-        table_name TEXT,
-        user_name TEXT,
-        action TEXT,
-        old_data JSONB,
-        new_data JSONB,
-        query TEXT,
-        timestamp TIMESTAMP
-    ) SERVER audit_server OPTIONS (schema_name 'public', table_name 'audit_log');" || handle_error "Failed to create foreign table"
+    read -p "Enter audit server IP: " audit_server_ip
+    read -p "Enter audit server port (default 5432): " audit_server_port
+    audit_server_port=${audit_server_port:-5432}
+    
+    sudo -u postgres psql -d mydb << EOF
+CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+CREATE SERVER IF NOT EXISTS audit_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host '$audit_server_ip', port '$audit_server_port', dbname 'audit_db');
+CREATE USER MAPPING IF NOT EXISTS FOR myuser
+    SERVER audit_server
+    OPTIONS (user 'audit_user', password 'audit_password');
+CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
+    id INTEGER,
+    table_name TEXT,
+    user_name TEXT,
+    action TEXT,
+    old_data JSONB,
+    new_data JSONB,
+    query TEXT,
+    timestamp TIMESTAMP
+) SERVER audit_server OPTIONS (schema_name 'public', table_name 'audit_log');
+EOF
 }
 
-# Fungsi untuk membuat tabel dan trigger audit
-create_audit_objects() {
-    echo "Creating audit objects..."
-    sudo -u postgres psql -d mydb -c "
-    CREATE OR REPLACE FUNCTION audit_trigger_func()
-    RETURNS TRIGGER AS \$\$
-    DECLARE
-        old_row JSONB;
-        new_row JSONB;
-    BEGIN
-        IF (TG_OP = 'UPDATE') THEN
-            old_row = row_to_json(OLD)::JSONB;
-            new_row = row_to_json(NEW)::JSONB;
-        ELSIF (TG_OP = 'DELETE') THEN
-            old_row = row_to_json(OLD)::JSONB;
-        ELSIF (TG_OP = 'INSERT') THEN
-            new_row = row_to_json(NEW)::JSONB;
-        END IF;
+# Fungsi untuk membuat tabel sampel
+create_sample_tables() {
+    echo "Creating sample tables..."
+    sudo -u postgres psql -d mydb << EOF
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    stock INTEGER NOT NULL
+);
 
-        INSERT INTO audit_log (
-            table_name,
-            user_name,
-            action,
-            old_data,
-            new_data,
-            query
-        )
-        VALUES (
-            TG_TABLE_NAME::TEXT,
-            session_user::TEXT,
-            TG_OP,
-            old_row,
-            new_row,
-            current_query()
-        );
-        RETURN NULL;
-    END;
-    \$\$ LANGUAGE plpgsql SECURITY DEFINER;" || handle_error "Failed to create audit trigger function"
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER REFERENCES products(id),
+    quantity INTEGER NOT NULL,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+EOF
+    echo "Sample tables created successfully."
+}
 
-    local tables=("products" "categories" "orders" "order_items")
-    for table in "${tables[@]}"
-    do
-        sudo -u postgres psql -d mydb -c "
-        CREATE TRIGGER ${table}_audit_trigger
-        AFTER INSERT OR UPDATE OR DELETE ON $table
-        FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();" || handle_error "Failed to create audit trigger for $table"
-    done
+# Fungsi untuk membuat trigger audit
+create_audit_trigger() {
+    echo "Creating audit trigger..."
+    sudo -u postgres psql -d mydb << EOF
+CREATE OR REPLACE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS \$\$
+DECLARE
+    old_row JSONB = NULL;
+    new_row JSONB = NULL;
+BEGIN
+    IF (TG_OP = 'UPDATE') THEN
+        old_row = to_jsonb(OLD);
+        new_row = to_jsonb(NEW);
+    ELSIF (TG_OP = 'DELETE') THEN
+        old_row = to_jsonb(OLD);
+    ELSIF (TG_OP = 'INSERT') THEN
+        new_row = to_jsonb(NEW);
+    END IF;
+
+    INSERT INTO audit_log (table_name, user_name, action, old_data, new_data, query)
+    VALUES (TG_TABLE_NAME::TEXT, session_user::TEXT, TG_OP, old_row, new_row, current_query());
+    
+    RETURN NULL;
+END;
+\$\$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER products_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON products
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+
+CREATE TRIGGER orders_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON orders
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+EOF
+    echo "Audit trigger created successfully."
+}
+
+# Fungsi untuk melakukan operasi CRUD sampel
+perform_sample_crud() {
+    echo "Performing sample CRUD operations..."
+    sudo -u postgres psql -d mydb << EOF
+-- Create (Insert) sample product
+INSERT INTO products (name, price, stock) VALUES ('Laptop', 999.99, 50);
+INSERT INTO products (name, price, stock) VALUES ('Smartphone', 499.99, 100);
+
+-- Read (Select) products
+SELECT * FROM products;
+
+-- Update product
+UPDATE products SET price = 1099.99 WHERE name = 'Laptop';
+
+-- Create (Insert) sample order
+INSERT INTO orders (product_id, quantity) VALUES (1, 2);
+
+-- Read (Select) orders with product details
+SELECT o.id, p.name, o.quantity, o.order_date 
+FROM orders o 
+JOIN products p ON o.product_id = p.id;
+
+-- Delete order
+DELETE FROM orders WHERE id = 1;
+
+-- Final read to show results
+SELECT * FROM products;
+SELECT * FROM orders;
+EOF
+    echo "Sample CRUD operations completed."
 }
 
 # Main function
@@ -102,8 +157,12 @@ main_server_setup() {
     create_db_and_user
     configure_postgresql
     setup_fdw
-    create_audit_objects
+    create_sample_tables
+    create_audit_trigger
+    perform_sample_crud
     echo "Main server setup completed successfully!"
+    echo "You can now connect to this PostgreSQL server remotely using:"
+    echo "psql -h <this_server_ip> -p 5432 -U myuser -d mydb"
 }
 
 # Run the main function
