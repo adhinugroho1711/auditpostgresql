@@ -6,8 +6,8 @@ show_menu() {
     echo "================================"
     echo "PostgreSQL Server Setup Installer"
     echo "================================"
-    echo "1. Install Main Server"
-    echo "2. Install Audit Server"
+    echo "1. Install/Configure Main Server"
+    echo "2. Install/Configure Audit Server"
     echo "3. Exit"
     echo "================================"
 }
@@ -18,11 +18,11 @@ handle_choice() {
     read -p "Enter choice [1-3]: " choice
     case $choice in
         1) 
-            echo "Installing Main Server..."
+            echo "Installing/Configuring Main Server..."
             bash main_server_setup.sh
             ;;
         2) 
-            echo "Installing Audit Server..."
+            echo "Installing/Configuring Audit Server..."
             bash audit_server_setup.sh
             ;;
         3) 
