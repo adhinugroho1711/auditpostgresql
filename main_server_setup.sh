@@ -10,23 +10,28 @@ handle_error() {
 
 # Fungsi untuk memeriksa apakah PostgreSQL sudah terinstal
 check_postgresql_installed() {
-    if command -v psql &> /dev/null; then
-        echo "PostgreSQL is already installed."
+    if command -v psql &> /dev/null && sudo systemctl is-active --quiet postgresql; then
+        echo "PostgreSQL is already installed and running."
         return 0
     else
+        echo "PostgreSQL is not installed or not running."
         return 1
     fi
 }
 
+# Fungsi untuk mendapatkan versi PostgreSQL
+get_postgresql_version() {
+    local version=$(sudo -u postgres psql -t -c "SELECT version();" | awk '{print $2}' | cut -d. -f1,2)
+    echo "$version"
+}
+
 # Fungsi untuk menginstal PostgreSQL
 install_postgresql() {
-    if check_postgresql_installed; then
-        echo "Skipping PostgreSQL installation as it's already installed."
-    else
-        echo "Installing PostgreSQL..."
-        sudo apt-get update || handle_error "Failed to update package list"
-        sudo apt-get install -y postgresql postgresql-contrib || handle_error "Failed to install PostgreSQL"
-    fi
+    echo "Installing PostgreSQL..."
+    sudo apt-get update || handle_error "Failed to update package list"
+    sudo apt-get install -y postgresql postgresql-contrib || handle_error "Failed to install PostgreSQL"
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
 }
 
 # Fungsi untuk membuat database dan user
@@ -39,16 +44,10 @@ GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;
 EOF
 }
 
-# Fungsi untuk mendapatkan versi PostgreSQL
-get_postgresql_version() {
-    local version=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
-    echo "$version"
-}
-
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
 configure_postgresql() {
-    echo "Configuring PostgreSQL for remote access..."
-    local pg_version=$(get_postgresql_version)
+    local pg_version=$1
+    echo "Configuring PostgreSQL version $pg_version for remote access..."
     sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/$pg_version/main/postgresql.conf
     echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/$pg_version/main/pg_hba.conf
     sudo systemctl restart postgresql || handle_error "Failed to restart PostgreSQL"
@@ -174,13 +173,23 @@ EOF
 
 # Main function
 main_server_setup() {
-    install_postgresql
+    if check_postgresql_installed; then
+        echo "PostgreSQL is already installed. Proceeding with configuration..."
+        local pg_version=$(get_postgresql_version)
+        configure_postgresql "$pg_version"
+    else
+        echo "PostgreSQL is not installed. Installing now..."
+        install_postgresql
+        local pg_version=$(get_postgresql_version)
+        configure_postgresql "$pg_version"
+    fi
+
     create_db_and_user
-    configure_postgresql
     setup_fdw
     create_sample_tables
     create_audit_trigger
     perform_sample_crud
+    
     echo "Main server setup completed successfully!"
     echo "You can now connect to this PostgreSQL server remotely using:"
     echo "psql -h <this_server_ip> -p 5432 -U myuser -d mydb"
