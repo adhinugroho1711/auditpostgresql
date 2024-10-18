@@ -13,32 +13,67 @@ handle_error() {
     exit 1
 }
 
+# Fungsi untuk menyiapkan direktori temporer
+setup_temp_dir() {
+    TEMP_DIR=$(mktemp -d)
+    log_info "Temporary directory created: $TEMP_DIR"
+}
+
+# Fungsi untuk membersihkan direktori temporer
+cleanup_temp_dir() {
+    if [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR"
+        log_info "Temporary directory removed: $TEMP_DIR"
+    fi
+}
+
+# Pastikan direktori temporer dibersihkan saat script berakhir
+trap cleanup_temp_dir EXIT
+
 # Fungsi untuk memeriksa apakah PostgreSQL sudah terinstal
 check_postgresql_installed() {
-    if command -v psql &> /dev/null && sudo systemctl is-active --quiet postgresql; then
-        log_info "PostgreSQL is already installed and running."
+    log_info "Checking if PostgreSQL $PG_VERSION is installed..."
+    if dpkg -s postgresql-$PG_VERSION &> /dev/null; then
+        log_info "PostgreSQL $PG_VERSION is installed."
         return 0
     else
-        log_info "PostgreSQL is not installed or not running."
+        log_info "PostgreSQL $PG_VERSION is not installed."
         return 1
     fi
 }
 
-# Fungsi untuk mendapatkan versi utama PostgreSQL
-get_postgresql_version() {
-    local version=$(sudo -u postgres psql -t -c "SHOW server_version_num;" | tr -d ' \n' | cut -c1-2)
-    log_debug "PostgreSQL version: $version"
-    echo "$version"
+# Fungsi untuk memeriksa status PostgreSQL
+check_postgresql_status() {
+    log_info "Checking PostgreSQL status..."
+    if sudo systemctl is-active --quiet postgresql; then
+        log_info "PostgreSQL is running."
+        return 0
+    else
+        log_error "PostgreSQL is not running. Attempting to start..."
+        sudo systemctl start postgresql
+        if sudo systemctl is-active --quiet postgresql; then
+            log_info "PostgreSQL started successfully."
+            return 0
+        else
+            log_error "Failed to start PostgreSQL. Check system logs for more information."
+            return 1
+        fi
+    fi
 }
 
 # Fungsi untuk menginstal PostgreSQL
 install_postgresql() {
-    log_info "Installing PostgreSQL..."
+    log_info "Installing PostgreSQL $PG_VERSION..."
     sudo apt-get update || handle_error "Failed to update package list"
-    sudo apt-get install -y postgresql postgresql-contrib || handle_error "Failed to install PostgreSQL"
+    sudo apt-get install -y postgresql-$PG_VERSION postgresql-contrib-$PG_VERSION || handle_error "Failed to install PostgreSQL $PG_VERSION"
     sudo systemctl start postgresql
     sudo systemctl enable postgresql
-    log_info "PostgreSQL installed successfully."
+    log_info "PostgreSQL $PG_VERSION installed successfully."
+    
+    # Tambahkan pengecekan status setelah instalasi
+    if ! check_postgresql_status; then
+        handle_error "PostgreSQL installation completed, but the service is not running."
+    fi
 }
 
 # Fungsi untuk membuat database dan user
@@ -49,15 +84,17 @@ CREATE DATABASE $AUDIT_DB_NAME;
 CREATE USER $AUDIT_DB_USER WITH ENCRYPTED PASSWORD '$AUDIT_DB_PASSWORD';
 GRANT ALL PRIVILEGES ON DATABASE $AUDIT_DB_NAME TO $AUDIT_DB_USER;
 EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to create database and user"
+    fi
     log_info "Database and user created successfully."
 }
 
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
 configure_postgresql() {
-    local version=$(sudo -u postgres psql -t -c "SHOW server_version_num;" | tr -d ' \n' | cut -c1-2)
-    log_info "Configuring PostgreSQL version $pg_version for remote access..."
-    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/$pg_version/main/postgresql.conf
-    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/$pg_version/main/pg_hba.conf
+    log_info "Configuring PostgreSQL $PG_VERSION for remote access..."
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/$PG_VERSION/main/postgresql.conf
+    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/$PG_VERSION/main/pg_hba.conf
     sudo systemctl restart postgresql || handle_error "Failed to restart PostgreSQL"
     log_info "PostgreSQL configured for remote access."
 }
@@ -68,13 +105,44 @@ drop_audit_table() {
     sudo -u postgres psql -d $AUDIT_DB_NAME << EOF
 DROP TABLE IF EXISTS audit_log;
 EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to drop audit table"
+    fi
     log_info "Audit table dropped successfully."
 }
 
 # Main function
 audit_server_setup() {
     log_info "Starting audit server setup..."
+    setup_temp_dir
+
     if check_postgresql_installed; then
-        log_info "PostgreSQL is already installed. Proceeding with configuration..."
-        local pg_version=$(get_postgresql_version)
-        configure_postgresql
+        log_info "PostgreSQL $PG_VERSION is already installed. Proceeding with configuration..."
+    else
+        log_info "PostgreSQL $PG_VERSION is not installed. Installing now..."
+        install_postgresql
+    fi
+    
+    # Pastikan PostgreSQL berjalan
+    if ! check_postgresql_status; then
+        handle_error "PostgreSQL is not running. Cannot proceed with setup."
+    fi
+
+    configure_postgresql
+    create_db_and_user
+    
+    # Option to drop existing audit table
+    read -p "Do you want to drop the existing audit table? (y/n): " drop_choice
+    if [[ $drop_choice == "y" || $drop_choice == "Y" ]]; then
+        drop_audit_table
+    fi
+    
+    create_audit_table
+    
+    log_info "Audit server setup completed successfully!"
+    log_info "You can now connect to this PostgreSQL server remotely using:"
+    log_info "psql -h <this_server_ip> -p 5432 -U $AUDIT_DB_USER -d $AUDIT_DB_NAME"
+}
+
+# Run the main function
+audit_server_setup
