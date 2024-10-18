@@ -88,7 +88,18 @@ EOF
     if [ $? -ne 0 ]; then
         handle_error "Failed to create database and user"
     fi
-    log_info "Database and user created successfully."
+    
+    # Tambahkan izin tambahan
+    sudo -u postgres psql -d $DB_NAME << EOF
+GRANT ALL PRIVILEGES ON SCHEMA public TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
+EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to grant additional permissions"
+    fi
+    
+    log_info "Database, user, and permissions created successfully."
 }
 
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
@@ -131,7 +142,6 @@ EOF
     fi
     log_info "Foreign Data Wrapper setup completed."
 }
-
 
 # Fungsi untuk membuat trigger audit
 create_audit_trigger() {

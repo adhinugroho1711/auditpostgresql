@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS orders (
     quantity INTEGER NOT NULL,
     order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Berikan izin pada user utama
+GRANT ALL PRIVILEGES ON TABLE products, orders TO $DB_USER;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;
+
+-- Berikan izin pada skema public
+GRANT USAGE ON SCHEMA public TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
 EOF
     if [ $? -ne 0 ]; then
         log_error "Failed to create sample tables"
@@ -50,6 +59,8 @@ GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO $AUDIT_DB_USER;
 
 -- Berikan izin pada skema public
 GRANT USAGE ON SCHEMA public TO $AUDIT_DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $AUDIT_DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $AUDIT_DB_USER;
 EOF
     if [ $? -ne 0 ]; then
         log_error "Failed to create audit table"

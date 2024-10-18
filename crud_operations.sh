@@ -7,7 +7,7 @@ source ./logger.sh
 # Fungsi untuk melakukan operasi CRUD sampel
 perform_sample_crud() {
     log_info "Performing sample CRUD operations..."
-    sudo -u postgres psql -d $DB_NAME << EOF
+    PGPASSWORD=$DB_PASSWORD psql -h localhost -U $DB_USER -d $DB_NAME << EOF
 -- Create (Insert) sample product
 INSERT INTO products (name, price, stock) VALUES ('Laptop', 999.99, 50);
 INSERT INTO products (name, price, stock) VALUES ('Smartphone', 499.99, 100);
@@ -39,7 +39,7 @@ EOF
 # Fungsi untuk menampilkan hasil operasi CRUD
 display_crud_results() {
     log_info "Displaying CRUD results..."
-    sudo -u postgres psql -d $DB_NAME << EOF
+    PGPASSWORD=$DB_PASSWORD psql -h localhost -U $DB_USER -d $DB_NAME << EOF
 \echo 'Products table:'
 SELECT * FROM products;
 \echo 'Orders table:'
