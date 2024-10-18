@@ -2,72 +2,82 @@
 
 set -e  # Exit immediately if a command exits with a non-zero status.
 
+# Import dependencies
+source ./config.sh
+source ./logger.sh
+source ./create_tables.sh
+source ./crud_operations.sh
+
 # Fungsi untuk menangani kesalahan
 handle_error() {
-    echo "Error: $1" >&2
+    log_error "$1"
     exit 1
 }
 
 # Fungsi untuk memeriksa apakah PostgreSQL sudah terinstal
 check_postgresql_installed() {
     if command -v psql &> /dev/null && sudo systemctl is-active --quiet postgresql; then
-        echo "PostgreSQL is already installed and running."
+        log_info "PostgreSQL is already installed and running."
         return 0
     else
-        echo "PostgreSQL is not installed or not running."
+        log_info "PostgreSQL is not installed or not running."
         return 1
     fi
 }
 
-# Fungsi untuk mendapatkan versi PostgreSQL
+# Fungsi untuk mendapatkan versi utama PostgreSQL
 get_postgresql_version() {
     local version=$(sudo -u postgres psql -t -c "SHOW server_version_num;" | tr -d ' \n' | cut -c1-2)
+    log_debug "PostgreSQL version: $version"
     echo "$version"
 }
 
 # Fungsi untuk menginstal PostgreSQL
 install_postgresql() {
-    echo "Installing PostgreSQL..."
+    log_info "Installing PostgreSQL..."
     sudo apt-get update || handle_error "Failed to update package list"
     sudo apt-get install -y postgresql postgresql-contrib || handle_error "Failed to install PostgreSQL"
     sudo systemctl start postgresql
     sudo systemctl enable postgresql
+    log_info "PostgreSQL installed successfully."
 }
 
 # Fungsi untuk membuat database dan user
 create_db_and_user() {
-    echo "Creating database mydb and user..."
+    log_info "Creating database $DB_NAME and user $DB_USER..."
     sudo -u postgres psql << EOF
-CREATE DATABASE mydb;
-CREATE USER myuser WITH ENCRYPTED PASSWORD 'mypassword';
-GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;
+CREATE DATABASE $DB_NAME;
+CREATE USER $DB_USER WITH ENCRYPTED PASSWORD '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 EOF
+    log_info "Database and user created successfully."
 }
 
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
 configure_postgresql() {
     local pg_version=$1
-    echo "Configuring PostgreSQL version $pg_version for remote access..."
+    log_info "Configuring PostgreSQL version $pg_version for remote access..."
     sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/$pg_version/main/postgresql.conf
     echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/$pg_version/main/pg_hba.conf
     sudo systemctl restart postgresql || handle_error "Failed to restart PostgreSQL"
+    log_info "PostgreSQL configured for remote access."
 }
 
 # Fungsi untuk setup Foreign Data Wrapper
 setup_fdw() {
-    echo "Setting up Foreign Data Wrapper..."
+    log_info "Setting up Foreign Data Wrapper..."
     read -p "Enter audit server IP: " audit_server_ip
     read -p "Enter audit server port (default 5432): " audit_server_port
     audit_server_port=${audit_server_port:-5432}
     
-    sudo -u postgres psql -d mydb << EOF
+    sudo -u postgres psql -d $DB_NAME << EOF
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 CREATE SERVER IF NOT EXISTS audit_server
     FOREIGN DATA WRAPPER postgres_fdw
-    OPTIONS (host '$audit_server_ip', port '$audit_server_port', dbname 'audit_db');
-CREATE USER MAPPING IF NOT EXISTS FOR myuser
+    OPTIONS (host '$audit_server_ip', port '$audit_server_port', dbname '$AUDIT_DB_NAME');
+CREATE USER MAPPING IF NOT EXISTS FOR $DB_USER
     SERVER audit_server
-    OPTIONS (user 'audit_user', password 'audit_password');
+    OPTIONS (user '$AUDIT_DB_USER', password '$AUDIT_DB_PASSWORD');
 CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
     id INTEGER,
     table_name TEXT,
@@ -79,33 +89,35 @@ CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
     timestamp TIMESTAMP
 ) SERVER audit_server OPTIONS (schema_name 'public', table_name 'audit_log');
 EOF
+    log_info "Foreign Data Wrapper setup completed."
 }
 
-# Fungsi untuk membuat tabel sampel
-create_sample_tables() {
-    echo "Creating sample tables..."
-    sudo -u postgres psql -d mydb << EOF
-CREATE TABLE IF NOT EXISTS products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    price DECIMAL(10, 2) NOT NULL,
-    stock INTEGER NOT NULL
-);
+# Fungsi untuk menghapus fungsi dan tabel audit
+drop_audit_objects() {
+    log_info "Dropping audit-related objects..."
+    sudo -u postgres psql -d $DB_NAME << EOF
+-- Drop triggers
+DROP TRIGGER IF EXISTS products_audit_trigger ON products;
+DROP TRIGGER IF EXISTS orders_audit_trigger ON orders;
 
-CREATE TABLE IF NOT EXISTS orders (
-    id SERIAL PRIMARY KEY,
-    product_id INTEGER REFERENCES products(id),
-    quantity INTEGER NOT NULL,
-    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Drop function
+DROP FUNCTION IF EXISTS audit_trigger_func();
+
+-- Drop foreign table
+DROP FOREIGN TABLE IF EXISTS audit_log;
+
+-- Drop foreign data wrapper objects
+DROP USER MAPPING IF EXISTS FOR $DB_USER SERVER audit_server;
+DROP SERVER IF EXISTS audit_server CASCADE;
+DROP EXTENSION IF EXISTS postgres_fdw;
 EOF
-    echo "Sample tables created successfully."
+    log_info "Audit-related objects dropped successfully."
 }
 
 # Fungsi untuk membuat trigger audit
 create_audit_trigger() {
-    echo "Creating audit trigger..."
-    sudo -u postgres psql -d mydb << EOF
+    log_info "Creating audit trigger..."
+    sudo -u postgres psql -d $DB_NAME << EOF
 CREATE OR REPLACE FUNCTION audit_trigger_func()
 RETURNS TRIGGER AS \$\$
 DECLARE
@@ -136,63 +148,40 @@ CREATE TRIGGER orders_audit_trigger
 AFTER INSERT OR UPDATE OR DELETE ON orders
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 EOF
-    echo "Audit trigger created successfully."
-}
-
-# Fungsi untuk melakukan operasi CRUD sampel
-perform_sample_crud() {
-    echo "Performing sample CRUD operations..."
-    sudo -u postgres psql -d mydb << EOF
--- Create (Insert) sample product
-INSERT INTO products (name, price, stock) VALUES ('Laptop', 999.99, 50);
-INSERT INTO products (name, price, stock) VALUES ('Smartphone', 499.99, 100);
-
--- Read (Select) products
-SELECT * FROM products;
-
--- Update product
-UPDATE products SET price = 1099.99 WHERE name = 'Laptop';
-
--- Create (Insert) sample order
-INSERT INTO orders (product_id, quantity) VALUES (1, 2);
-
--- Read (Select) orders with product details
-SELECT o.id, p.name, o.quantity, o.order_date 
-FROM orders o 
-JOIN products p ON o.product_id = p.id;
-
--- Delete order
-DELETE FROM orders WHERE id = 1;
-
--- Final read to show results
-SELECT * FROM products;
-SELECT * FROM orders;
-EOF
-    echo "Sample CRUD operations completed."
+    log_info "Audit trigger created successfully."
 }
 
 # Main function
 main_server_setup() {
+    log_info "Starting main server setup..."
     if check_postgresql_installed; then
-        echo "PostgreSQL is already installed. Proceeding with configuration..."
+        log_info "PostgreSQL is already installed. Proceeding with configuration..."
         local pg_version=$(get_postgresql_version)
         configure_postgresql "$pg_version"
     else
-        echo "PostgreSQL is not installed. Installing now..."
+        log_info "PostgreSQL is not installed. Installing now..."
         install_postgresql
         local pg_version=$(get_postgresql_version)
         configure_postgresql "$pg_version"
     fi
 
     create_db_and_user
+    
+    # Option to drop existing audit objects
+    read -p "Do you want to drop existing audit objects? (y/n): " drop_choice
+    if [[ $drop_choice == "y" || $drop_choice == "Y" ]]; then
+        drop_audit_objects
+    fi
+    
     setup_fdw
     create_sample_tables
     create_audit_trigger
     perform_sample_crud
+    display_crud_results
     
-    echo "Main server setup completed successfully!"
-    echo "You can now connect to this PostgreSQL server remotely using:"
-    echo "psql -h <this_server_ip> -p 5432 -U myuser -d mydb"
+    log_info "Main server setup completed successfully!"
+    log_info "You can now connect to this PostgreSQL server remotely using:"
+    log_info "psql -h <this_server_ip> -p 5432 -U $DB_USER -d $DB_NAME"
 }
 
 # Run the main function

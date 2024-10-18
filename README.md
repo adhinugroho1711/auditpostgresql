@@ -1,91 +1,88 @@
-# PostgreSQL Server Setup Installer
+# PostgreSQL Server Setup
 
-This repository contains scripts to set up PostgreSQL servers for a main database and a separate audit database. The setup includes configuring Foreign Data Wrapper (FDW) for the main server to connect to the audit server.
+Proyek ini menyediakan script bash untuk menyiapkan dan mengkonfigurasi server PostgreSQL, termasuk server utama dan server audit. Script ini dirancang untuk mempermudah proses setup, konfigurasi, dan pengujian server PostgreSQL.
 
-## Contents
+## Fitur
 
-- `install.sh`: Main installer script with a menu interface
-- `main_server_setup.sh`: Script to set up the main PostgreSQL server
-- `audit_server_setup.sh`: Script to set up the audit PostgreSQL server
+- Setup otomatis untuk server PostgreSQL utama dan audit
+- Konfigurasi Foreign Data Wrapper untuk koneksi antar server
+- Pembuatan tabel sampel dan operasi CRUD
+- Implementasi sistem audit log
+- Antarmuka pengguna interaktif dengan tampilan berwarna
+- Logging komprehensif untuk kemudahan debugging
 
-## Prerequisites
+## Persyaratan Sistem
 
-- Ubuntu 20.04 or later (or a Debian-based system)
-- Sudo privileges on both the main and audit servers
-- SSH access between the main and audit servers (for FDW setup)
+- Sistem operasi berbasis Debian (misalnya Ubuntu)
+- Akses sudo
+- Bash shell
 
-## Installation
+## Struktur Proyek
 
-1. Clone this repository:
+```
+.
+├── config.sh
+├── create_tables.sh
+├── crud_operations.sh
+├── logger.sh
+├── main_server_setup.sh
+├── audit_server_setup.sh
+└── run_setup.sh
+```
+
+## Cara Penggunaan
+
+1. Clone repositori ini ke mesin lokal Anda:
    ```
-   git clone https://github.com/your-username/postgresql-installer.git
-   cd postgresql-installer
+   git clone https://github.com/username/postgresql-server-setup.git
+   cd postgresql-server-setup
    ```
 
-2. Make the scripts executable:
+2. Beri izin eksekusi pada semua file bash:
    ```
-   chmod +x install.sh main_server_setup.sh audit_server_setup.sh
-   ```
-
-3. Run the installer:
-   ```
-   sudo ./install.sh
+   chmod +x *.sh
    ```
 
-4. Follow the on-screen menu to install either the main server or the audit server.
+3. Edit `config.sh` sesuai dengan kebutuhan Anda (opsional):
+   ```
+   nano config.sh
+   ```
 
-## Configuration
+4. Jalankan script setup:
+   ```
+   sudo ./run_setup.sh
+   ```
 
-### Main Server
+5. Ikuti petunjuk di layar untuk menyelesaikan proses setup.
 
-The main server setup script will:
-- Install PostgreSQL
-- Create a database named `mydb` and a user `myuser`
-- Configure PostgreSQL for remote access
-- Set up Foreign Data Wrapper to connect to the audit server
-- Create sample tables (products, categories, orders, order_items)
-- Set up audit triggers on these tables
+## Konfigurasi
 
-### Audit Server
+Anda dapat mengubah konfigurasi default dengan mengedit file `config.sh`. Beberapa pengaturan yang dapat diubah meliputi:
 
-The audit server setup script will:
-- Install PostgreSQL
-- Create a database named `audit_db` and a user `audit_user`
-- Configure PostgreSQL for remote access
-- Create the `audit_log` table
+- Nama database
+- Nama pengguna dan kata sandi
+- Lokasi file log
 
-## Important Notes
+## Logging
 
-1. These scripts are designed for a basic setup and should be further customized for production use.
-
-2. Default passwords are used in the scripts. Make sure to change these to strong, unique passwords before using in a production environment.
-
-3. In `main_server_setup.sh`, replace `audit_server_ip` with the actual IP address or hostname of your audit server.
-
-4. The scripts assume PostgreSQL 12. If you're using a different version, you may need to adjust the configuration file paths.
-
-5. These scripts do not include firewall configuration or additional security measures. Ensure you follow best practices to secure your PostgreSQL servers.
-
-6. For production use, consider implementing SSL/TLS connections between the main and audit servers.
-
-## Customization
-
-You can customize the scripts to fit your specific needs:
-- Modify the database names, user names, or passwords in the scripts
-- Add or remove tables in the main database
-- Adjust PostgreSQL configuration parameters
+Log dari proses setup disimpan di `/var/log/postgresql_setup.log` secara default. Anda dapat mengubah lokasi ini di `config.sh`.
 
 ## Troubleshooting
 
-If you encounter any issues during installation:
-1. Check the error messages printed by the scripts
-2. Verify that all prerequisites are met
-3. Ensure you have the necessary permissions to install packages and modify PostgreSQL configurations
+Jika Anda mengalami masalah saat menjalankan script:
 
-## Contributing
+1. Pastikan Anda memiliki akses sudo.
+2. Periksa file log untuk informasi lebih detail tentang error.
+3. Pastikan semua dependensi telah terpenuhi.
 
-Contributions to improve these scripts are welcome. Please submit a pull request or open an issue to discuss proposed changes.
+## Kontribusi
 
-## License
+Kontribusi untuk proyek ini sangat diterima. Silakan fork repositori ini, buat perubahan, dan ajukan pull request.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Lisensi
+
+Proyek ini dilisensikan di bawah [MIT License](LICENSE).
+
+## Kontak
+
+Jika Anda memiliki pertanyaan atau masalah, silakan buka issue di repositori GitHub ini.
