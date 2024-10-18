@@ -41,7 +41,7 @@ EOF
 
 # Fungsi untuk mendapatkan versi PostgreSQL
 get_postgresql_version() {
-    local version=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
+    local version=$(sudo -u postgres psql -t -c "SHOW server_version_num;" | tr -d ' \n' | cut -c1-2)
     echo "$version"
 }
 
