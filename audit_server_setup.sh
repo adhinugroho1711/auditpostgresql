@@ -18,12 +18,6 @@ check_postgresql_installed() {
     fi
 }
 
-# Fungsi untuk mendapatkan versi PostgreSQL
-get_postgresql_version() {
-    local version=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
-    echo "$version"
-}
-
 # Fungsi untuk menginstal PostgreSQL
 install_postgresql() {
     if check_postgresql_installed; then
@@ -43,6 +37,12 @@ CREATE DATABASE audit_db;
 CREATE USER audit_user WITH ENCRYPTED PASSWORD 'audit_password';
 GRANT ALL PRIVILEGES ON DATABASE audit_db TO audit_user;
 EOF
+}
+
+# Fungsi untuk mendapatkan versi PostgreSQL
+get_postgresql_version() {
+    local version=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
+    echo "$version"
 }
 
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
