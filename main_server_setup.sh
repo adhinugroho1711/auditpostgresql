@@ -132,31 +132,6 @@ EOF
     log_info "Foreign Data Wrapper setup completed."
 }
 
-# Fungsi untuk menghapus fungsi dan tabel audit
-drop_audit_objects() {
-    log_info "Dropping audit-related objects..."
-    sudo -u postgres psql -d $DB_NAME << EOF
--- Drop triggers
-DROP TRIGGER IF EXISTS products_audit_trigger ON products;
-DROP TRIGGER IF EXISTS orders_audit_trigger ON orders;
-
--- Drop function
-DROP FUNCTION IF EXISTS audit_trigger_func();
-
--- Drop foreign table
-DROP FOREIGN TABLE IF EXISTS audit_log;
-
--- Drop foreign data wrapper objects
-DROP USER MAPPING IF EXISTS FOR $DB_USER SERVER audit_server;
-DROP SERVER IF EXISTS audit_server CASCADE;
-DROP EXTENSION IF EXISTS postgres_fdw;
-EOF
-    if [ $? -ne 0 ]; then
-        handle_error "Failed to drop audit objects"
-    fi
-    log_info "Audit-related objects dropped successfully."
-}
-
 # Fungsi untuk membuat trigger audit
 create_audit_trigger() {
     log_info "Creating audit trigger..."
@@ -216,17 +191,9 @@ main_server_setup() {
 
     configure_postgresql
     create_db_and_user
-    
-    # Option to drop existing audit objects
-    read -p "Do you want to drop existing audit objects? (y/n): " drop_choice
-    if [[ $drop_choice == "y" || $drop_choice == "Y" ]]; then
-        drop_audit_objects
-    fi
-    
     setup_fdw
     create_sample_tables
     create_audit_trigger
-    perform_sample_crud
     display_crud_results
     
     log_info "Main server setup completed successfully!"

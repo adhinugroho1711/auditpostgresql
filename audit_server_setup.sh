@@ -99,17 +99,6 @@ configure_postgresql() {
     log_info "PostgreSQL configured for remote access."
 }
 
-# Fungsi untuk menghapus tabel audit
-drop_audit_table() {
-    log_info "Dropping audit_log table..."
-    sudo -u postgres psql -d $AUDIT_DB_NAME << EOF
-DROP TABLE IF EXISTS audit_log;
-EOF
-    if [ $? -ne 0 ]; then
-        handle_error "Failed to drop audit table"
-    fi
-    log_info "Audit table dropped successfully."
-}
 
 # Main function
 audit_server_setup() {
@@ -130,13 +119,6 @@ audit_server_setup() {
 
     configure_postgresql
     create_db_and_user
-    
-    # Option to drop existing audit table
-    read -p "Do you want to drop the existing audit table? (y/n): " drop_choice
-    if [[ $drop_choice == "y" || $drop_choice == "Y" ]]; then
-        drop_audit_table
-    fi
-    
     create_audit_table
     
     log_info "Audit server setup completed successfully!"
