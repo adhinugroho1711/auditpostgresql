@@ -8,11 +8,31 @@ handle_error() {
     exit 1
 }
 
+# Fungsi untuk memeriksa apakah PostgreSQL sudah terinstal
+check_postgresql_installed() {
+    if command -v psql &> /dev/null; then
+        echo "PostgreSQL is already installed."
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Fungsi untuk mendapatkan versi PostgreSQL
+get_postgresql_version() {
+    local version=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
+    echo "$version"
+}
+
 # Fungsi untuk menginstal PostgreSQL
 install_postgresql() {
-    echo "Installing PostgreSQL..."
-    sudo apt-get update || handle_error "Failed to update package list"
-    sudo apt-get install -y postgresql postgresql-contrib || handle_error "Failed to install PostgreSQL"
+    if check_postgresql_installed; then
+        echo "Skipping PostgreSQL installation as it's already installed."
+    else
+        echo "Installing PostgreSQL..."
+        sudo apt-get update || handle_error "Failed to update package list"
+        sudo apt-get install -y postgresql postgresql-contrib || handle_error "Failed to install PostgreSQL"
+    fi
 }
 
 # Fungsi untuk membuat database dan user
@@ -28,8 +48,9 @@ EOF
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
 configure_postgresql() {
     echo "Configuring PostgreSQL for remote access..."
-    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/14/main/postgresql.conf
-    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/14/main/pg_hba.conf
+    local pg_version=$(get_postgresql_version)
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/$pg_version/main/postgresql.conf
+    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/$pg_version/main/pg_hba.conf
     sudo systemctl restart postgresql || handle_error "Failed to restart PostgreSQL"
 }
 
