@@ -1,43 +1,49 @@
 #!/bin/bash
 
-# Import logger
+# Import dependencies
+source ./config.sh
 source ./logger.sh
 
-# Fungsi untuk membuat tabel sampel
-create_sample_tables() {
-    log_info "Creating sample tables..."
-    sudo -u postgres psql -d mydb << EOF
-CREATE TABLE IF NOT EXISTS products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    price DECIMAL(10, 2) NOT NULL,
-    stock INTEGER NOT NULL
-);
+# Fungsi untuk melakukan operasi CRUD sampel
+perform_sample_crud() {
+    log_info "Performing sample CRUD operations..."
+    sudo -u postgres psql -d $DB_NAME << EOF
+-- Create (Insert) sample product
+INSERT INTO products (name, price, stock) VALUES ('Laptop', 999.99, 50);
+INSERT INTO products (name, price, stock) VALUES ('Smartphone', 499.99, 100);
 
-CREATE TABLE IF NOT EXISTS orders (
-    id SERIAL PRIMARY KEY,
-    product_id INTEGER REFERENCES products(id),
-    quantity INTEGER NOT NULL,
-    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Read (Select) products
+SELECT * FROM products;
+
+-- Update product
+UPDATE products SET price = 1099.99 WHERE name = 'Laptop';
+
+-- Create (Insert) sample order
+INSERT INTO orders (product_id, quantity) VALUES (1, 2);
+
+-- Read (Select) orders with product details
+SELECT o.id, p.name, o.quantity, o.order_date 
+FROM orders o 
+JOIN products p ON o.product_id = p.id;
+
+-- Delete order
+DELETE FROM orders WHERE id = 1;
+
+-- Final read to show results
+SELECT * FROM products;
+SELECT * FROM orders;
 EOF
-    log_info "Sample tables created successfully."
+    log_info "Sample CRUD operations completed."
 }
 
-# Fungsi untuk membuat tabel audit
-create_audit_table() {
-    log_info "Creating audit_log table..."
-    sudo -u postgres psql -d audit_db << EOF
-CREATE TABLE IF NOT EXISTS audit_log (
-    id SERIAL PRIMARY KEY,
-    table_name TEXT NOT NULL,
-    user_name TEXT NOT NULL,
-    action TEXT NOT NULL,
-    old_data JSONB,
-    new_data JSONB,
-    query TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+# Fungsi untuk menampilkan hasil operasi CRUD
+display_crud_results() {
+    log_info "Displaying CRUD results..."
+    sudo -u postgres psql -d $DB_NAME << EOF
+\echo 'Products table:'
+SELECT * FROM products;
+\echo 'Orders table:'
+SELECT * FROM orders;
 EOF
-    log_info "Audit table created successfully."
+    log_info "CRUD results displayed."
 }

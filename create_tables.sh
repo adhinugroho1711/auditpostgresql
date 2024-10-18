@@ -1,12 +1,13 @@
 #!/bin/bash
 
-# Import logger
+# Import logger dan config
 source ./logger.sh
+source ./config.sh
 
 # Fungsi untuk membuat tabel sampel
 create_sample_tables() {
     log_info "Creating sample tables..."
-    sudo -u postgres psql -d mydb << EOF
+    sudo -u postgres psql -d $DB_NAME << EOF
 CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -21,13 +22,17 @@ CREATE TABLE IF NOT EXISTS orders (
     order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 EOF
+    if [ $? -ne 0 ]; then
+        log_error "Failed to create sample tables"
+        return 1
+    fi
     log_info "Sample tables created successfully."
 }
 
 # Fungsi untuk membuat tabel audit
 create_audit_table() {
     log_info "Creating audit_log table..."
-    sudo -u postgres psql -d audit_db << EOF
+    sudo -u postgres psql -d $AUDIT_DB_NAME << EOF
 CREATE TABLE IF NOT EXISTS audit_log (
     id SERIAL PRIMARY KEY,
     table_name TEXT NOT NULL,
@@ -38,6 +43,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
     query TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Berikan izin pada audit user
+GRANT ALL PRIVILEGES ON TABLE audit_log TO $AUDIT_DB_USER;
+GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO $AUDIT_DB_USER;
+
+-- Berikan izin pada skema public
+GRANT USAGE ON SCHEMA public TO $AUDIT_DB_USER;
 EOF
+    if [ $? -ne 0 ]; then
+        log_error "Failed to create audit table"
+        return 1
+    fi
     log_info "Audit table created successfully."
 }

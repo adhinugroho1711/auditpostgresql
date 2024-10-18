@@ -132,6 +132,7 @@ EOF
     log_info "Foreign Data Wrapper setup completed."
 }
 
+
 # Fungsi untuk membuat trigger audit
 create_audit_trigger() {
     log_info "Creating audit trigger..."
@@ -194,6 +195,7 @@ main_server_setup() {
     setup_fdw
     create_sample_tables
     create_audit_trigger
+    perform_sample_crud
     display_crud_results
     
     log_info "Main server setup completed successfully!"

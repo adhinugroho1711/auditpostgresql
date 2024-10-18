@@ -87,7 +87,18 @@ EOF
     if [ $? -ne 0 ]; then
         handle_error "Failed to create database and user"
     fi
-    log_info "Database and user created successfully."
+    
+    # Tambahkan izin tambahan
+    sudo -u postgres psql -d $AUDIT_DB_NAME << EOF
+GRANT ALL PRIVILEGES ON SCHEMA public TO $AUDIT_DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $AUDIT_DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $AUDIT_DB_USER;
+EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to grant additional permissions"
+    fi
+    
+    log_info "Database, user, and permissions created successfully."
 }
 
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
@@ -98,7 +109,6 @@ configure_postgresql() {
     sudo systemctl restart postgresql || handle_error "Failed to restart PostgreSQL"
     log_info "PostgreSQL configured for remote access."
 }
-
 
 # Main function
 audit_server_setup() {
