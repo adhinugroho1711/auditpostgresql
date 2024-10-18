@@ -126,6 +126,9 @@ CREATE SERVER IF NOT EXISTS audit_server
 CREATE USER MAPPING IF NOT EXISTS FOR $DB_USER
     SERVER audit_server
     OPTIONS (user '$AUDIT_DB_USER', password '$AUDIT_DB_PASSWORD');
+CREATE USER MAPPING IF NOT EXISTS FOR postgres
+    SERVER audit_server
+    OPTIONS (user '$AUDIT_DB_USER', password '$AUDIT_DB_PASSWORD');
 CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
     id INTEGER,
     table_name TEXT,
@@ -136,6 +139,8 @@ CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
     query TEXT,
     timestamp TIMESTAMP
 ) SERVER audit_server OPTIONS (schema_name 'public', table_name 'audit_log');
+
+GRANT SELECT, INSERT ON audit_log TO $DB_USER;
 EOF
     if [ $? -ne 0 ]; then
         handle_error "Failed to setup Foreign Data Wrapper"
@@ -167,7 +172,9 @@ BEGIN
     
     RETURN NULL;
 END;
-\$\$ LANGUAGE plpgsql SECURITY DEFINER;
+\$\$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+ALTER FUNCTION audit_trigger_func() OWNER TO $DB_USER;
 
 CREATE TRIGGER products_audit_trigger
 AFTER INSERT OR UPDATE OR DELETE ON products
