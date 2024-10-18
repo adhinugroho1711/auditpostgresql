@@ -14,6 +14,24 @@ handle_error() {
     exit 1
 }
 
+# Fungsi untuk menyiapkan direktori temporer
+setup_temp_dir() {
+    TEMP_DIR=$(sudo mktemp -d)
+    sudo chown postgres:postgres "$TEMP_DIR"
+    log_info "Temporary directory created: $TEMP_DIR"
+}
+
+# Fungsi untuk membersihkan direktori temporer
+cleanup_temp_dir() {
+    if [ -d "$TEMP_DIR" ]; then
+        sudo rm -rf "$TEMP_DIR"
+        log_info "Temporary directory removed: $TEMP_DIR"
+    fi
+}
+
+# Pastikan direktori temporer dibersihkan saat script berakhir
+trap cleanup_temp_dir EXIT
+
 # Fungsi untuk memeriksa apakah PostgreSQL sudah terinstal
 check_postgresql_installed() {
     if command -v psql &> /dev/null && sudo systemctl is-active --quiet postgresql; then
@@ -27,9 +45,14 @@ check_postgresql_installed() {
 
 # Fungsi untuk mendapatkan versi utama PostgreSQL
 get_postgresql_version() {
-    local version=$(sudo -u postgres psql -t -c "SHOW server_version_num;" | tr -d ' \n' | cut -c1-2)
-    log_debug "PostgreSQL version: $version"
-    echo "$version"
+    local version
+    version=$(sudo -u postgres bash -c 'PGDATA=/var/lib/postgresql/*/main/ psql --no-align --tuples-only -c "SHOW server_version_num;"' 2>/dev/null | sed 's/^.//')
+    if [ $? -ne 0 ] || [ -z "$version" ]; then
+        log_error "Failed to get PostgreSQL version. Please check if PostgreSQL is installed and running."
+        return 1
+    fi
+    log_debug "Full PostgreSQL version number: $version"
+    echo "${version:0:2}"
 }
 
 # Fungsi untuk menginstal PostgreSQL
@@ -50,12 +73,15 @@ CREATE DATABASE $DB_NAME;
 CREATE USER $DB_USER WITH ENCRYPTED PASSWORD '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to create database and user"
+    fi
     log_info "Database and user created successfully."
 }
 
 # Fungsi untuk mengkonfigurasi PostgreSQL untuk remote access
 configure_postgresql() {
-    local version=$(sudo -u postgres psql -t -c "SHOW server_version_num;" | tr -d ' \n' | cut -c1-2)
+    local pg_version=$1
     log_info "Configuring PostgreSQL version $pg_version for remote access..."
     sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/$pg_version/main/postgresql.conf
     echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/$pg_version/main/pg_hba.conf
@@ -89,6 +115,9 @@ CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
     timestamp TIMESTAMP
 ) SERVER audit_server OPTIONS (schema_name 'public', table_name 'audit_log');
 EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to setup Foreign Data Wrapper"
+    fi
     log_info "Foreign Data Wrapper setup completed."
 }
 
@@ -111,6 +140,9 @@ DROP USER MAPPING IF EXISTS FOR $DB_USER SERVER audit_server;
 DROP SERVER IF EXISTS audit_server CASCADE;
 DROP EXTENSION IF EXISTS postgres_fdw;
 EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to drop audit objects"
+    fi
     log_info "Audit-related objects dropped successfully."
 }
 
@@ -148,20 +180,33 @@ CREATE TRIGGER orders_audit_trigger
 AFTER INSERT OR UPDATE OR DELETE ON orders
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 EOF
+    if [ $? -ne 0 ]; then
+        handle_error "Failed to create audit trigger"
+    fi
     log_info "Audit trigger created successfully."
 }
 
 # Main function
 main_server_setup() {
     log_info "Starting main server setup..."
+    setup_temp_dir
+
     if check_postgresql_installed; then
         log_info "PostgreSQL is already installed. Proceeding with configuration..."
-        local pg_version=$(get_postgresql_version)
+        local pg_version
+        if ! pg_version=$(get_postgresql_version); then
+            log_error "Failed to get PostgreSQL version. Exiting setup."
+            exit 1
+        fi
         configure_postgresql "$pg_version"
     else
         log_info "PostgreSQL is not installed. Installing now..."
         install_postgresql
-        local pg_version=$(get_postgresql_version)
+        local pg_version
+        if ! pg_version=$(get_postgresql_version); then
+            log_error "Failed to get PostgreSQL version after installation. Exiting setup."
+            exit 1
+        fi
         configure_postgresql "$pg_version"
     fi
 
