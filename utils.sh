@@ -50,37 +50,40 @@ check_postgresql_status() {
 
 ensure_pgaudit_loaded() {
     echo "Memeriksa status PgAudit..."
-    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
-        echo "PgAudit belum dimuat. Mencoba memuat PgAudit..."
+    
+    PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+    
+    # Periksa apakah pgaudit sudah ada di shared_preload_libraries
+    if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
+        echo "PgAudit belum dimuat. Mencoba mengaktifkan PgAudit..."
         
-        PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-        if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
-            echo "Menambahkan pgaudit ke shared_preload_libraries..."
-            if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
-                sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
-            else
-                echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
-            fi
+        # Backup konfigurasi asli
+        sudo cp "$PGCONF" "${PGCONF}.bak"
+        
+        # Tambahkan atau perbarui shared_preload_libraries
+        if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
+            sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
+        else
+            echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
         fi
         
-        echo "Me-restart PostgreSQL untuk menerapkan perubahan..."
+        echo "Konfigurasi PostgreSQL diperbarui. Me-restart PostgreSQL..."
         sudo systemctl restart postgresql
         
         # Tunggu sebentar agar PostgreSQL memiliki waktu untuk restart
         sleep 5
-        
-        # Periksa lagi apakah PgAudit sudah dimuat
-        if sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
-            echo "PgAudit berhasil dimuat."
-        else
-            echo "Gagal memuat PgAudit. Silakan periksa konfigurasi PostgreSQL Anda."
-            return 1
-        fi
-    else
-        echo "PgAudit sudah dimuat."
     fi
-    return 0
+    
+    # Verifikasi apakah pgaudit sudah dimuat
+    if sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
+        echo "PgAudit berhasil dimuat."
+        return 0
+    else
+        echo "Gagal memuat PgAudit. Silakan periksa log PostgreSQL untuk informasi lebih lanjut."
+        return 1
+    fi
 }
+
 
 change_postgres_password() {
     echo "Mengubah password untuk user PostgreSQL..."

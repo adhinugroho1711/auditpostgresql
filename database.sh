@@ -5,7 +5,7 @@ create_new_database() {
     echo "Membuat database baru..."
 
     if ! ensure_pgaudit_loaded; then
-        echo "Gagal memuat PgAudit. Pembuatan database akan dilanjutkan tanpa audit."
+        echo "Peringatan: PgAudit tidak dapat dimuat. Pembuatan database akan dilanjutkan tanpa audit."
     fi
 
     read -p "Masukkan nama database baru: " db_name
