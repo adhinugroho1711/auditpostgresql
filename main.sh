@@ -28,18 +28,19 @@ show_banner() {
     echo "================================================="
 }
 
-# Menu utama
 while true; do
     clear
     show_banner
     echo "
 1. Instal dan Konfigurasi PostgreSQL
-2. Konfigurasi Audit
+2. Konfigurasi Audit Detail
 3. Buat Database Baru
 4. Ubah Password PostgreSQL
-5. Keluar
+5. Periksa Log Audit
+6. Periksa Entri Audit Custom
+7. Keluar
 "
-    read -p "Pilih opsi (1-5): " choice
+    read -p "Pilih opsi (1-7): " choice
 
     case $choice in
         1)
@@ -47,8 +48,7 @@ while true; do
             configure_remote_access
             ;;
         2)
-            configure_pgaudit_all_databases
-            create_audit_trigger_function
+            configure_detailed_audit
             ;;
         3)
             create_new_database
@@ -57,6 +57,12 @@ while true; do
             change_postgres_password
             ;;
         5)
+            check_audit_logs
+            ;;
+        6)
+            check_custom_audit_entries
+            ;;
+        7)
             echo "Terima kasih telah menggunakan script ini."
             exit 0
             ;;
