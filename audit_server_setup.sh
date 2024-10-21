@@ -110,7 +110,6 @@ configure_postgresql() {
     log_info "PostgreSQL configured for remote access."
 }
 
-# Fungsi untuk membuat tabel audit
 create_audit_table() {
     log_info "Creating audit_log table..."
     sudo -u postgres psql -d $AUDIT_DB_NAME << EOF
@@ -133,6 +132,9 @@ GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO $AUDIT_DB_USER;
 GRANT USAGE ON SCHEMA public TO $AUDIT_DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $AUDIT_DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $AUDIT_DB_USER;
+
+-- Berikan akses ke sequence audit_log_id_seq untuk user utama
+GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO $DB_USER;
 EOF
     if [ $? -ne 0 ]; then
         log_error "Failed to create audit table"

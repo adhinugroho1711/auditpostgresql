@@ -111,7 +111,6 @@ configure_postgresql() {
     log_info "PostgreSQL configured for remote access."
 }
 
-# Fungsi untuk setup Foreign Data Wrapper
 setup_fdw() {
     log_info "Setting up Foreign Data Wrapper..."
     read -p "Enter audit server IP: " audit_server_ip
@@ -138,10 +137,13 @@ CREATE FOREIGN TABLE audit_log (
     old_data JSONB,
     new_data JSONB,
     query TEXT,
-    timestamp TIMESTAMP
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) SERVER audit_server OPTIONS (schema_name 'public', table_name 'audit_log');
 
 GRANT SELECT, INSERT ON audit_log TO $DB_USER;
+
+-- Tambahkan ini untuk mengakses sequence di server audit
+CREATE SEQUENCE audit_server.audit_log_id_seq;
 EOF
     if [ $? -ne 0 ]; then
         handle_error "Failed to setup Foreign Data Wrapper"
@@ -168,8 +170,8 @@ BEGIN
         new_row = to_jsonb(NEW);
     END IF;
 
-    INSERT INTO audit_log (table_name, user_name, action, old_data, new_data, query)
-    VALUES (TG_TABLE_NAME::TEXT, session_user::TEXT, TG_OP, old_row, new_row, current_query());
+    INSERT INTO audit_log (id, table_name, user_name, action, old_data, new_data, query)
+    VALUES (nextval('audit_server.audit_log_id_seq'::regclass), TG_TABLE_NAME::TEXT, session_user::TEXT, TG_OP, old_row, new_row, current_query());
     
     RETURN NULL;
 END;

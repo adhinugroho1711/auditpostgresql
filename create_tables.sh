@@ -19,12 +19,15 @@ CREATE TABLE IF NOT EXISTS items (
 
 -- Berikan izin pada user utama
 GRANT ALL PRIVILEGES ON TABLE items TO $DB_USER;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;
+GRANT USAGE, SELECT ON SEQUENCE items_id_seq TO $DB_USER;
 
 -- Berikan izin pada skema public
 GRANT USAGE ON SCHEMA public TO $DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
+
+-- Berikan semua hak akses pada sequence items_id_seq
+GRANT ALL PRIVILEGES ON SEQUENCE items_id_seq TO $DB_USER;
 EOF
     if [ $? -ne 0 ]; then
         log_error "Failed to create sample table"
@@ -56,6 +59,9 @@ GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO $AUDIT_DB_USER;
 GRANT USAGE ON SCHEMA public TO $AUDIT_DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $AUDIT_DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $AUDIT_DB_USER;
+
+-- Berikan akses ke sequence audit_log_id_seq untuk user utama
+GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO $DB_USER;
 EOF
     if [ $? -ne 0 ]; then
         log_error "Failed to create audit table"
