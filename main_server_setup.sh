@@ -129,7 +129,8 @@ CREATE USER MAPPING IF NOT EXISTS FOR $DB_USER
 CREATE USER MAPPING IF NOT EXISTS FOR postgres
     SERVER audit_server
     OPTIONS (user '$AUDIT_DB_USER', password '$AUDIT_DB_PASSWORD');
-CREATE FOREIGN TABLE IF NOT EXISTS audit_log (
+DROP FOREIGN TABLE IF EXISTS audit_log;
+CREATE FOREIGN TABLE audit_log (
     id INTEGER,
     table_name TEXT,
     user_name TEXT,
@@ -176,6 +177,7 @@ END;
 
 ALTER FUNCTION audit_trigger_func() OWNER TO $DB_USER;
 
+DROP TRIGGER IF EXISTS items_audit_trigger ON items;
 CREATE TRIGGER items_audit_trigger
 AFTER INSERT OR UPDATE OR DELETE ON items
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
