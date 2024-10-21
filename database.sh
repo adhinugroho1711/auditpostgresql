@@ -3,6 +3,11 @@
 # Fungsi untuk membuat database baru
 create_new_database() {
     echo "Membuat database baru..."
+
+    if ! ensure_pgaudit_loaded; then
+        echo "Gagal memuat PgAudit. Pembuatan database akan dilanjutkan tanpa audit."
+    fi
+
     read -p "Masukkan nama database baru: " db_name
 
     if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw $db_name; then
@@ -25,6 +30,8 @@ create_new_database() {
         fi
     fi
 }
+
+# ... (fungsi-fungsi lain tetap sama)
 
 # Fungsi untuk membuat tabel baru
 create_new_table() {

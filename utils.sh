@@ -47,3 +47,59 @@ check_postgresql_status() {
         fi
     fi
 }
+
+ensure_pgaudit_loaded() {
+    echo "Memeriksa status PgAudit..."
+    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
+        echo "PgAudit belum dimuat. Mencoba memuat PgAudit..."
+        
+        PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+        if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
+            echo "Menambahkan pgaudit ke shared_preload_libraries..."
+            if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
+                sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
+            else
+                echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
+            fi
+        fi
+        
+        echo "Me-restart PostgreSQL untuk menerapkan perubahan..."
+        sudo systemctl restart postgresql
+        
+        # Tunggu sebentar agar PostgreSQL memiliki waktu untuk restart
+        sleep 5
+        
+        # Periksa lagi apakah PgAudit sudah dimuat
+        if sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
+            echo "PgAudit berhasil dimuat."
+        else
+            echo "Gagal memuat PgAudit. Silakan periksa konfigurasi PostgreSQL Anda."
+            return 1
+        fi
+    else
+        echo "PgAudit sudah dimuat."
+    fi
+    return 0
+}
+
+change_postgres_password() {
+    echo "Mengubah password untuk user PostgreSQL..."
+    read -s -p "Masukkan password baru untuk user postgres: " new_password
+    echo
+    read -s -p "Konfirmasi password baru: " confirm_password
+    echo
+
+    if [ "$new_password" != "$confirm_password" ]; then
+        echo "Password tidak cocok. Silakan coba lagi."
+        return 1
+    fi
+
+    if sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$new_password';" ; then
+        echo "Password berhasil diubah."
+        # Update variabel global PG_PASSWORD
+        PG_PASSWORD=$new_password
+    else
+        echo "Gagal mengubah password. Silakan coba lagi."
+        return 1
+    fi
+}

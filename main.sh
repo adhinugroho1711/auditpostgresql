@@ -1,15 +1,18 @@
 #!/bin/bash
 
-# Impor modul-modul
-source ./utils.sh
-source ./installation.sh
-source ./audit.sh
-source ./database.sh
+# Dapatkan direktori script saat ini
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Impor modul-modul menggunakan path absolut
+source "$SCRIPT_DIR/utils.sh"
+source "$SCRIPT_DIR/installation.sh"
+source "$SCRIPT_DIR/audit.sh"
+source "$SCRIPT_DIR/database.sh"
 
 # Konfigurasi default
 PG_VERSION="14"
 PG_USER="postgres"
-PG_PASSWORD=""
+PG_PASSWORD="postgres123"  # Password default
 PG_DB="postgres"
 PG_HOST="localhost"
 PG_PORT="5432"
@@ -29,9 +32,10 @@ while true; do
 1. Instal dan Konfigurasi PostgreSQL
 2. Konfigurasi Audit
 3. Buat Database Baru
-4. Keluar
+4. Ubah Password PostgreSQL
+5. Keluar
 "
-    read -p "Pilih opsi (1-4): " choice
+    read -p "Pilih opsi (1-5): " choice
 
     case $choice in
         1)
@@ -46,6 +50,9 @@ while true; do
             create_new_database
             ;;
         4)
+            change_postgres_password
+            ;;
+        5)
             echo "Terima kasih telah menggunakan script ini."
             exit 0
             ;;

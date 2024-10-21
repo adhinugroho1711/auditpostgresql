@@ -30,11 +30,15 @@ ensure_pgaudit_loaded() {
     echo "pgAudit telah terinstal dan dimuat."
 }
 
+
 # Fungsi untuk mengkonfigurasi pgAudit untuk semua database
 configure_pgaudit_all_databases() {
     echo "Mengkonfigurasi pgAudit untuk semua database..."
 
-    ensure_pgaudit_loaded
+    if ! ensure_pgaudit_loaded; then
+        echo "Gagal memuat PgAudit. Konfigurasi audit tidak dapat dilanjutkan."
+        return 1
+    fi
 
     # Konfigurasi global
     sudo -u postgres psql -c "ALTER SYSTEM SET pgaudit.log = 'write, function, role, ddl';"
@@ -62,6 +66,7 @@ configure_pgaudit_all_databases() {
 
     echo "Konfigurasi pgAudit untuk semua database selesai."
 }
+
 
 # Fungsi untuk membuat trigger yang akan mengaktifkan audit pada tabel baru
 create_audit_trigger_function() {

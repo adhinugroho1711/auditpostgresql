@@ -1,5 +1,29 @@
 #!/bin/bash
 
+# Fungsi untuk memeriksa dan menginstal PostgreSQL
+check_and_install_postgresql() {
+    if ! command -v psql &> /dev/null; then
+        echo "PostgreSQL tidak terinstal. Menginstal PostgreSQL $PG_VERSION..."
+        sudo apt-get update
+        sudo apt-get install -y postgresql-$PG_VERSION postgresql-contrib-$PG_VERSION
+        if [ $? -ne 0 ]; then
+            error_exit "Gagal menginstal PostgreSQL. Silakan instal secara manual dan jalankan script ini kembali."
+        fi
+        echo "PostgreSQL $PG_VERSION berhasil diinstal."
+    else
+        echo "PostgreSQL sudah terinstal."
+    fi
+}
+
+# Fungsi untuk mengatur password default PostgreSQL
+set_default_postgres_password() {
+    local default_password="postgres123"  # Anda bisa mengubah ini sesuai kebutuhan
+    echo "Mengatur password default untuk user PostgreSQL..."
+    sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$default_password';"
+    echo "Password default telah diatur untuk user postgres."
+    echo "PERINGATAN: Pastikan untuk mengubah password ini segera setelah instalasi."
+}
+
 install_postgresql_and_pgaudit() {
     echo "Menginstal PostgreSQL $PG_VERSION dan pgaudit..."
     
@@ -34,8 +58,11 @@ install_postgresql_and_pgaudit() {
     echo "Me-restart PostgreSQL untuk menerapkan perubahan..."
     sudo systemctl restart postgresql
 
+    # Atur password default
+    set_default_postgres_password
+
     echo "Instalasi PostgreSQL $PG_VERSION dan pgaudit selesai."
-    echo "PERINGATAN: Akses remote telah diaktifkan. Pastikan untuk mengamankan server Anda dan hanya mengizinkan koneksi dari alamat IP yang dipercaya."
+    echo "PERINGATAN: Password default telah diatur. Pastikan untuk mengubahnya segera."
 }
 
 configure_remote_access() {
