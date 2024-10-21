@@ -1,42 +1,47 @@
 #!/bin/bash
 
-# Fungsi untuk memastikan pgAudit terinstal dan dimuat
+# Fungsi untuk memastikan pgAudit dimuat
 ensure_pgaudit_loaded() {
-    echo "Memastikan pgAudit terinstal dan dimuat..."
+    echo "Memastikan pgAudit dimuat..."
     
-    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit';" | grep -q 1; then
-        echo "pgAudit belum terinstal. Menginstal pgAudit..."
-        sudo apt-get update
-        sudo apt-get install -y postgresql-$PG_VERSION-pgaudit
-    fi
-
-    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_extension WHERE extname = 'pgaudit';" | grep -q 1; then
-        echo "Memuat ekstensi pgAudit..."
-        sudo -u postgres psql -c "CREATE EXTENSION pgaudit;"
-    fi
-
-    PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-    if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
-        echo "Menambahkan pgaudit ke shared_preload_libraries..."
-        if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
-            sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
-        else
-            echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
+    # Periksa apakah pgAudit sudah dimuat
+    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
+        echo "pgAudit belum dimuat. Mencoba memuat pgAudit..."
+        
+        PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+        if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
+            echo "Menambahkan pgaudit ke shared_preload_libraries..."
+            if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
+                sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
+            else
+                echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
+            fi
         fi
-        echo "PostgreSQL perlu di-restart untuk memuat pgaudit. Me-restart PostgreSQL..."
-        restart_postgresql
+        
+        echo "Me-restart PostgreSQL untuk menerapkan perubahan..."
+        sudo systemctl restart postgresql
+        
+        # Tunggu sebentar agar PostgreSQL memiliki waktu untuk restart
+        sleep 5
+        
+        # Periksa lagi apakah pgAudit sudah dimuat
+        if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
+            echo "Gagal memuat pgAudit. Silakan periksa konfigurasi PostgreSQL Anda."
+            return 1
+        fi
     fi
-
-    echo "pgAudit telah terinstal dan dimuat."
+    
+    echo "pgAudit berhasil dimuat."
+    return 0
 }
-
 
 # Fungsi untuk mengkonfigurasi pgAudit untuk semua database
 configure_pgaudit_all_databases() {
     echo "Mengkonfigurasi pgAudit untuk semua database..."
 
+    # Pastikan pgAudit dimuat
     if ! ensure_pgaudit_loaded; then
-        echo "Gagal memuat PgAudit. Konfigurasi audit tidak dapat dilanjutkan."
+        echo "Gagal memuat pgAudit. Konfigurasi audit tidak dapat dilanjutkan."
         return 1
     fi
 
@@ -62,11 +67,10 @@ configure_pgaudit_all_databases() {
     done
 
     echo "Menerapkan perubahan konfigurasi..."
-    restart_postgresql
+    sudo systemctl restart postgresql
 
     echo "Konfigurasi pgAudit untuk semua database selesai."
 }
-
 
 # Fungsi untuk membuat trigger yang akan mengaktifkan audit pada tabel baru
 create_audit_trigger_function() {
@@ -96,11 +100,4 @@ create_audit_trigger_function() {
     "
 
     echo "Fungsi trigger untuk mengaktifkan audit pada tabel baru telah dibuat."
-}
-
-# Fungsi untuk memeriksa log audit
-check_audit_logs() {
-    echo "Memeriksa log audit..."
-    sudo tail -n 50 /var/log/postgresql/postgresql-$PG_VERSION-main.log
-    echo "Selesai memeriksa log audit."
 }

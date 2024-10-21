@@ -3,11 +3,14 @@
 # Dapatkan direktori script saat ini
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-# Impor modul-modul menggunakan path absolut
-source "$SCRIPT_DIR/utils.sh"
-source "$SCRIPT_DIR/installation.sh"
-source "$SCRIPT_DIR/audit.sh"
-source "$SCRIPT_DIR/database.sh"
+# Pindah ke direktori script
+cd "$SCRIPT_DIR"
+
+# Impor modul-modul menggunakan path relatif
+source ./utils.sh
+source ./installation.sh
+source ./audit.sh
+source ./database.sh
 
 # Konfigurasi default
 PG_VERSION="14"
@@ -16,6 +19,7 @@ PG_PASSWORD="postgres123"  # Password default
 PG_DB="postgres"
 PG_HOST="localhost"
 PG_PORT="5432"
+
 
 # Fungsi untuk menampilkan banner
 show_banner() {
