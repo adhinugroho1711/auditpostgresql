@@ -23,10 +23,28 @@ show_banner() {
     echo "================================================="
 }
 
+# Fungsi untuk verifikasi koneksi
+verify_connection() {
+    echo "Memverifikasi koneksi PostgreSQL..."
+    if verify_postgres_connection; then
+        echo "Koneksi berhasil."
+    else
+        echo "Koneksi gagal. Mohon periksa kredensial PostgreSQL Anda."
+        read -p "Apakah Anda ingin mengubah kredensial? (y/n): " change_cred
+        if [[ $change_cred =~ ^[Yy]$ ]]; then
+            change_postgres_password
+        else
+            echo "Silakan update kredensial di file config.sh dan jalankan script kembali."
+            exit 1
+        fi
+    fi
+}
+
 # Menu utama
 while true; do
     clear
     show_banner
+    verify_connection  # Verifikasi koneksi setiap kali menu ditampilkan
     echo "
 1. Instal dan Konfigurasi PostgreSQL
 2. Konfigurasi Audit Detail

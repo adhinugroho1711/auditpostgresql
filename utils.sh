@@ -48,7 +48,6 @@ check_postgresql_status() {
     fi
 }
 
-
 ensure_pgaudit_loaded() {
     echo "Memeriksa status PgAudit..."
     
@@ -94,7 +93,6 @@ ensure_pgaudit_loaded() {
         return 1
     fi
 }
-
 
 change_postgres_password() {
     echo "Mengubah password untuk user PostgreSQL..."
