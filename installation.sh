@@ -17,9 +17,8 @@ check_and_install_postgresql() {
 
 # Fungsi untuk mengatur password default PostgreSQL
 set_default_postgres_password() {
-    local default_password="postgres123"  # Anda bisa mengubah ini sesuai kebutuhan
     echo "Mengatur password default untuk user PostgreSQL..."
-    sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$default_password';"
+    sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$PG_PASSWORD';"
     echo "Password default telah diatur untuk user postgres."
     echo "PERINGATAN: Pastikan untuk mengubah password ini segera setelah instalasi."
 }
@@ -43,20 +42,7 @@ install_postgresql_and_pgaudit() {
         rm -rf pgaudit
     fi
 
-    PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-    if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
-        echo "Menambahkan pgaudit ke shared_preload_libraries..."
-        if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
-            sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
-        else
-            echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
-        fi
-    else
-        echo "pgaudit sudah terdaftar di shared_preload_libraries"
-    fi
-
-    echo "Me-restart PostgreSQL untuk menerapkan perubahan..."
-    sudo systemctl restart postgresql
+    ensure_pgaudit_loaded
 
     # Atur password default
     set_default_postgres_password
@@ -68,15 +54,11 @@ install_postgresql_and_pgaudit() {
 configure_remote_access() {
     echo "Mengonfigurasi akses remote untuk PostgreSQL..."
 
-    PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-    PGHBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONFIG_DIR/postgresql.conf"
+    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a "$PG_CONFIG_DIR/pg_hba.conf"
+    sudo ufw allow $PG_PORT/tcp
 
-    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" $PGCONF
-    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a $PGHBA
-    sudo ufw allow 5432/tcp
-
-    echo "Me-restart PostgreSQL untuk menerapkan perubahan..."
-    sudo systemctl restart postgresql
+    restart_postgresql
 
     echo "Akses remote telah dikonfigurasi."
 }

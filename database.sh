@@ -10,14 +10,14 @@ create_new_database() {
 
     read -p "Masukkan nama database baru: " db_name
 
-    if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw $db_name; then
+    if run_psql "\l" | grep -qw $db_name; then
         echo "Database '$db_name' sudah ada."
     else
-        if sudo -u postgres createdb $db_name; then
+        if run_psql "CREATE DATABASE $db_name;"; then
             echo "Database '$db_name' berhasil dibuat."
             
             # Aktifkan pgAudit untuk database baru
-            sudo -u postgres psql -d $db_name -c "CREATE EXTENSION IF NOT EXISTS pgaudit;"
+            PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $db_name -c "CREATE EXTENSION IF NOT EXISTS pgaudit;"
             echo "Audit telah diaktifkan untuk database '$db_name'."
 
             # Tanyakan apakah user ingin membuat tabel
@@ -31,8 +31,6 @@ create_new_database() {
     fi
 }
 
-# ... (fungsi-fungsi lain tetap sama)
-
 # Fungsi untuk membuat tabel baru
 create_new_table() {
     local db_name=$1
@@ -40,7 +38,7 @@ create_new_table() {
     read -p "Masukkan nama tabel baru: " table_name
 
     # Membuat tabel sederhana sebagai contoh
-    sudo -u postgres psql -d "$db_name" -c "
+    PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d "$db_name" -c "
     CREATE TABLE $table_name (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
