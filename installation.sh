@@ -55,6 +55,7 @@ configure_remote_access() {
     echo "Mengonfigurasi akses remote untuk PostgreSQL..."
 
     sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONFIG_DIR/postgresql.conf"
+    sudo sed -i "s/#shared_preload_libraries = ''/shared_preload_libraries = 'pgaudit'/" "$PG_CONFIG_DIR/postgresql.conf"
     echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a "$PG_CONFIG_DIR/pg_hba.conf"
     sudo ufw allow $PG_PORT/tcp
 
