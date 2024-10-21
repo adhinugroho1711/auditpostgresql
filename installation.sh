@@ -1,15 +1,18 @@
 #!/bin/bash
 
+# Tetapkan versi PostgreSQL
+PG_VERSION="14"
+
 # Fungsi untuk memeriksa dan menginstal PostgreSQL
 check_and_install_postgresql() {
     if ! command -v psql &> /dev/null; then
-        echo "PostgreSQL tidak terinstal. Menginstal PostgreSQL..."
+        echo "PostgreSQL tidak terinstal. Menginstal PostgreSQL $PG_VERSION..."
         sudo apt-get update
-        sudo apt-get install -y postgresql postgresql-contrib
+        sudo apt-get install -y postgresql-$PG_VERSION postgresql-contrib-$PG_VERSION
         if [ $? -ne 0 ]; then
             error_exit "Gagal menginstal PostgreSQL. Silakan instal secara manual dan jalankan script ini kembali."
         fi
-        echo "PostgreSQL berhasil diinstal."
+        echo "PostgreSQL $PG_VERSION berhasil diinstal."
         
         # Konfigurasi akses remote secara default
         configure_remote_access
@@ -22,7 +25,6 @@ check_and_install_postgresql() {
 configure_remote_access() {
     echo "Mengonfigurasi akses remote untuk PostgreSQL..."
 
-    PG_VERSION=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
     PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
     PGHBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
 
@@ -40,13 +42,9 @@ configure_remote_access() {
 
 # Fungsi untuk menginstal PostgreSQL dan pgaudit
 install_postgresql_and_pgaudit() {
-    echo "Menginstal PostgreSQL dan pgaudit..."
+    echo "Menginstal PostgreSQL $PG_VERSION dan pgaudit..."
     
     check_and_install_postgresql
-
-    # Dapatkan versi PostgreSQL
-    PG_VERSION=$(psql --version | awk '{print $3}' | cut -d. -f1)
-    echo "Terdeteksi PostgreSQL versi $PG_VERSION"
 
     # Install pgaudit extension
     if apt-cache show postgresql-$PG_VERSION-pgaudit &> /dev/null; then
@@ -75,6 +73,6 @@ install_postgresql_and_pgaudit() {
 
     restart_postgresql
 
-    echo "Instalasi PostgreSQL dan pgaudit selesai."
+    echo "Instalasi PostgreSQL $PG_VERSION dan pgaudit selesai."
     echo "PERINGATAN: Akses remote telah diaktifkan. Pastikan untuk mengamankan server Anda dan hanya mengizinkan koneksi dari alamat IP yang dipercaya."
 }
