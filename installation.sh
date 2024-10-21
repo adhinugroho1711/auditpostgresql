@@ -24,10 +24,31 @@ set_default_postgres_password() {
 }
 
 install_postgresql_and_pgaudit() {
+    echo "Memeriksa instalasi PostgreSQL..."
+    
+    if command -v psql &> /dev/null; then
+        echo "PostgreSQL sudah terinstal."
+        read -p "Apakah Anda ingin menginstal ulang? (y/n): " reinstall
+        if [[ $reinstall =~ ^[Yy]$ ]]; then
+            sudo apt-get remove --purge postgresql*
+        else
+            return
+        fi
+    fi
+
     echo "Menginstal PostgreSQL $PG_VERSION dan pgaudit..."
     
-    check_and_install_postgresql
+    sudo apt-get update
+    sudo apt-get install -y postgresql-$PG_VERSION postgresql-contrib-$PG_VERSION
 
+    if [ $? -ne 0 ]; then
+        echo "Gagal menginstal PostgreSQL. Silakan periksa koneksi internet Anda dan coba lagi."
+        return 1
+    fi
+
+    echo "PostgreSQL $PG_VERSION berhasil diinstal."
+
+    # Install pgAudit
     if apt-cache show postgresql-$PG_VERSION-pgaudit &> /dev/null; then
         sudo apt-get install -y postgresql-$PG_VERSION-pgaudit || error_exit "Gagal menginstal pgaudit extension"
     else
@@ -50,6 +71,7 @@ install_postgresql_and_pgaudit() {
     echo "Instalasi PostgreSQL $PG_VERSION dan pgaudit selesai."
     echo "PERINGATAN: Password default telah diatur. Pastikan untuk mengubahnya segera."
 }
+
 
 configure_remote_access() {
     echo "Mengonfigurasi akses remote untuk PostgreSQL..."

@@ -23,51 +23,39 @@ show_banner() {
     echo "================================================="
 }
 
-# Fungsi untuk verifikasi koneksi
-verify_connection() {
-    echo "Memverifikasi koneksi PostgreSQL..."
-    if verify_postgres_connection; then
-        echo "Koneksi berhasil."
-    else
-        echo "Koneksi gagal. Mohon periksa kredensial PostgreSQL Anda."
-        read -p "Apakah Anda ingin mengubah kredensial? (y/n): " change_cred
-        if [[ $change_cred =~ ^[Yy]$ ]]; then
-            change_postgres_password
-        else
-            echo "Silakan update kredensial di file config.sh dan jalankan script kembali."
-            exit 1
-        fi
-    fi
-}
-
 # Menu utama
 while true; do
     clear
     show_banner
-    verify_connection  # Verifikasi koneksi setiap kali menu ditampilkan
     echo "
-1. Instal dan Konfigurasi PostgreSQL
-2. Konfigurasi Audit Detail
-3. Buat Database Baru
-4. Ubah Password PostgreSQL
-5. Periksa Log Audit
-6. Periksa Entri Audit Custom
-7. Backup Database
-8. Restore Database
-9. Keluar
+1. Instal PostgreSQL dan pgAudit
+2. Konfigurasi Akses Remote PostgreSQL
+3. Verifikasi Koneksi PostgreSQL
+4. Konfigurasi Audit Detail
+5. Buat Database Baru
+6. Ubah Password PostgreSQL
+7. Periksa Log Audit
+8. Periksa Entri Audit Custom
+9. Backup Database
+10. Restore Database
+11. Operasi CRUD
+12. Keluar
 "
-    read -p "Pilih opsi (1-9): " choice
+    read -p "Pilih opsi (1-12): " choice
 
     case $choice in
-        1) install_postgresql_and_pgaudit && configure_remote_access ;;
-        2) configure_detailed_audit ;;
-        3) create_new_database ;;
-        4) change_postgres_password ;;
-        5) check_audit_logs ;;
-        6) check_custom_audit_entries ;;
-        7) backup_database ;;
-        8) restore_database ;;
-        9) echo "Terima kasih telah menggunakan script ini."; exit 0 ;;
+        1) install_postgresql_and_pgaudit ;;
+        2) configure_remote_access ;;
+        3) verify_postgres_connection ;;
+        4) configure_detailed_audit ;;
+        5) create_new_database ;;
+        6) change_postgres_password ;;
+        7) check_audit_logs ;;
+        8) check_custom_audit_entries ;;
+        9) backup_database ;;
+        10) restore_database ;;
+        11) manage_crud_operations ;;
+        12) echo "Terima kasih telah menggunakan script ini."; exit 0 ;;
         *) echo "Pilihan tidak valid. Silakan coba lagi." ;;
     esac
 
