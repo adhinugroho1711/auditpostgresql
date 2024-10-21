@@ -176,12 +176,8 @@ END;
 
 ALTER FUNCTION audit_trigger_func() OWNER TO $DB_USER;
 
-CREATE TRIGGER products_audit_trigger
-AFTER INSERT OR UPDATE OR DELETE ON products
-FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
-
-CREATE TRIGGER orders_audit_trigger
-AFTER INSERT OR UPDATE OR DELETE ON orders
+CREATE TRIGGER items_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON items
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 EOF
     if [ $? -ne 0 ]; then
@@ -210,7 +206,7 @@ main_server_setup() {
     configure_postgresql
     create_db_and_user
     setup_fdw
-    create_sample_tables
+    create_sample_table
     create_audit_trigger
     perform_sample_crud
     display_crud_results
