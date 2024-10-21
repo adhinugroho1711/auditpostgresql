@@ -31,7 +31,6 @@ configure_remote_access() {
     echo "Akses remote telah dikonfigurasi."
 }
 
-# Fungsi untuk menginstal PostgreSQL dan pgaudit
 install_postgresql_and_pgaudit() {
     echo "Menginstal PostgreSQL $PG_VERSION dan pgaudit..."
     
@@ -52,15 +51,18 @@ install_postgresql_and_pgaudit() {
     fi
 
     PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-    if sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
-        echo "pgaudit sudah terdaftar di shared_preload_libraries"
-    elif sudo grep -q "shared_preload_libraries" "$PGCONF"; then
-        sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
+    if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
+        echo "Menambahkan pgaudit ke shared_preload_libraries..."
+        if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
+            sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
+        else
+            echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
+        fi
+        echo "PostgreSQL perlu di-restart untuk memuat pgaudit. Me-restart PostgreSQL..."
+        restart_postgresql
     else
-        echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
+        echo "pgaudit sudah terdaftar di shared_preload_libraries"
     fi
-
-    restart_postgresql
 
     echo "Instalasi PostgreSQL $PG_VERSION dan pgaudit selesai."
     echo "PERINGATAN: Akses remote telah diaktifkan. Pastikan untuk mengamankan server Anda dan hanya mengizinkan koneksi dari alamat IP yang dipercaya."

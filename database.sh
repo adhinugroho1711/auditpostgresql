@@ -99,3 +99,28 @@ check_audit_logs() {
     sudo tail -n 50 /var/log/postgresql/postgresql-$PG_VERSION-main.log
     echo "Selesai memeriksa log audit."
 }
+
+create_new_database() {
+    echo "Membuat database baru..."
+    read -p "Masukkan nama database baru: " db_name
+
+    if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw $db_name; then
+        echo "Database '$db_name' sudah ada."
+    else
+        if sudo -u postgres createdb $db_name; then
+            echo "Database '$db_name' berhasil dibuat."
+            
+            # Aktifkan pgAudit untuk database baru
+            sudo -u postgres psql -d $db_name -c "CREATE EXTENSION IF NOT EXISTS pgaudit;"
+            echo "Audit telah diaktifkan untuk database '$db_name'."
+
+            # Tanyakan apakah user ingin membuat tabel
+            read -p "Apakah Anda ingin membuat tabel baru di database ini? (y/n): " create_table
+            if [[ $create_table =~ ^[Yy]$ ]]; then
+                create_new_table $db_name
+            fi
+        else
+            echo "Gagal membuat database '$db_name'."
+        fi
+    fi
+}
