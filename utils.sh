@@ -48,6 +48,7 @@ check_postgresql_status() {
     fi
 }
 
+
 ensure_pgaudit_loaded() {
     echo "Memeriksa status PgAudit..."
     
@@ -58,20 +59,33 @@ ensure_pgaudit_loaded() {
     
     PGCONF="$PG_CONFIG_DIR/postgresql.conf"
     
-    if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
-        echo "PgAudit belum dimuat. Mencoba mengaktifkan PgAudit..."
-        
-        sudo cp "$PGCONF" "${PGCONF}.bak"
-        
-        if sudo grep -q "shared_preload_libraries" "$PGCONF"; then
-            sudo sed -i "s/shared_preload_libraries = '/shared_preload_libraries = 'pgaudit,/" "$PGCONF"
-        else
-            echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
-        fi
-        
+    # Periksa keberadaan file konfigurasi
+    if [ ! -f "$PGCONF" ]; then
+        echo "Error: File konfigurasi PostgreSQL tidak ditemukan di $PGCONF"
+        return 1
+    fi
+
+    # Periksa dan edit shared_preload_libraries menggunakan sed
+    if sudo grep -q "^#shared_preload_libraries.*pgaudit" "$PGCONF"; then
+        echo "Mengaktifkan shared_preload_libraries dengan pgaudit..."
+        sudo sed -i "s/^#shared_preload_libraries.*pgaudit/shared_preload_libraries = 'pgaudit'/" "$PGCONF"
+    elif ! sudo grep -q "^shared_preload_libraries" "$PGCONF"; then
+        echo "Menambahkan shared_preload_libraries dengan pgaudit..."
+        sudo sed -i "$ a shared_preload_libraries = 'pgaudit'" "$PGCONF"
+    elif ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
+        echo "Menambahkan pgaudit ke shared_preload_libraries..."
+        sudo sed -i "s/shared_preload_libraries = '\(.*\)'/shared_preload_libraries = '\1,pgaudit'/" "$PGCONF"
+    else
+        echo "PgAudit sudah terdaftar di shared_preload_libraries"
+    fi
+
+    # Memuat ulang konfigurasi PostgreSQL
+    if ! sudo -u postgres psql -c "SELECT pg_reload_conf();" > /dev/null 2>&1; then
+        echo "Gagal memuat ulang konfigurasi PostgreSQL. Mencoba restart..."
         restart_postgresql
     fi
-    
+
+    # Verifikasi apakah pgaudit berhasil dimuat
     if run_psql "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
         echo "PgAudit berhasil dimuat."
         return 0
@@ -80,6 +94,7 @@ ensure_pgaudit_loaded() {
         return 1
     fi
 }
+
 
 change_postgres_password() {
     echo "Mengubah password untuk user PostgreSQL..."
