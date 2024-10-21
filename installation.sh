@@ -10,9 +10,32 @@ check_and_install_postgresql() {
             error_exit "Gagal menginstal PostgreSQL. Silakan instal secara manual dan jalankan script ini kembali."
         fi
         echo "PostgreSQL berhasil diinstal."
+        
+        # Konfigurasi akses remote secara default
+        configure_remote_access
     else
         echo "PostgreSQL sudah terinstal."
     fi
+}
+
+# Fungsi untuk mengonfigurasi akses remote
+configure_remote_access() {
+    echo "Mengonfigurasi akses remote untuk PostgreSQL..."
+
+    PG_VERSION=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
+    PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+    PGHBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
+
+    # Ubah postgresql.conf untuk mengizinkan koneksi dari semua alamat
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" $PGCONF
+
+    # Tambahkan aturan ke pg_hba.conf untuk mengizinkan akses remote
+    echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a $PGHBA
+
+    # Buka port PostgreSQL di firewall
+    sudo ufw allow 5432/tcp
+
+    echo "Akses remote telah dikonfigurasi."
 }
 
 # Fungsi untuk menginstal PostgreSQL dan pgaudit
@@ -53,4 +76,5 @@ install_postgresql_and_pgaudit() {
     restart_postgresql
 
     echo "Instalasi PostgreSQL dan pgaudit selesai."
+    echo "PERINGATAN: Akses remote telah diaktifkan. Pastikan untuk mengamankan server Anda dan hanya mengizinkan koneksi dari alamat IP yang dipercaya."
 }

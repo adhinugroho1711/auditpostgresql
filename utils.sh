@@ -29,3 +29,20 @@ verify_postgres_connection() {
         return 1
     fi
 }
+
+check_postgresql_status() {
+    echo "Memeriksa status PostgreSQL..."
+    if sudo systemctl is-active --quiet postgresql; then
+        echo "PostgreSQL sedang berjalan."
+        sudo systemctl status postgresql | grep Active
+    else
+        echo "PostgreSQL tidak berjalan."
+        echo "Mencoba menjalankan PostgreSQL..."
+        sudo systemctl start postgresql
+        if sudo systemctl is-active --quiet postgresql; then
+            echo "PostgreSQL berhasil dijalankan."
+        else
+            echo "Gagal menjalankan PostgreSQL. Silakan periksa log sistem untuk informasi lebih lanjut."
+        fi
+    fi
+}
