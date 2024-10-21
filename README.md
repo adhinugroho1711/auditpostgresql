@@ -1,88 +1,129 @@
-# PostgreSQL Server Setup
+# Panduan Langkah Demi Langkah: Pengaturan Monitoring PostgreSQL dan Database Perpustakaan
 
-Proyek ini menyediakan script bash untuk menyiapkan dan mengkonfigurasi server PostgreSQL, termasuk server utama dan server audit. Script ini dirancang untuk mempermudah proses setup, konfigurasi, dan pengujian server PostgreSQL.
+Ikuti langkah-langkah berikut untuk mengatur sistem monitoring PostgreSQL dan database perpustakaan:
 
-## Fitur
+## 1. Persiapan
 
-- Setup otomatis untuk server PostgreSQL utama dan audit
-- Konfigurasi Foreign Data Wrapper untuk koneksi antar server
-- Pembuatan tabel sampel dan operasi CRUD
-- Implementasi sistem audit log
-- Antarmuka pengguna interaktif dengan tampilan berwarna
-- Logging komprehensif untuk kemudahan debugging
+1. Pastikan Anda memiliki akses root atau sudo pada sistem Ubuntu atau Debian Anda.
+2. Buka terminal.
 
-## Persyaratan Sistem
+## 2. Instalasi PostgreSQL dan pgaudit
 
-- Sistem operasi berbasis Debian (misalnya Ubuntu)
-- Akses sudo
-- Bash shell
-
-## Struktur Proyek
-
-```
-.
-├── config.sh
-├── create_tables.sh
-├── crud_operations.sh
-├── logger.sh
-├── main_server_setup.sh
-├── audit_server_setup.sh
-└── run_setup.sh
-```
-
-## Cara Penggunaan
-
-1. Clone repositori ini ke mesin lokal Anda:
+1. Buat file `postgresql_monitoring_installer.sh` dengan konten yang ada di README.md.
+2. Berikan izin eksekusi pada file:
    ```
-   git clone https://github.com/username/postgresql-server-setup.git
-   cd postgresql-server-setup
+   chmod +x postgresql_monitoring_installer.sh
+   ```
+3. Jalankan script installer:
+   ```
+   sudo ./postgresql_monitoring_installer.sh
    ```
 
-2. Beri izin eksekusi pada semua file bash:
-   ```
-   chmod +x *.sh
-   ```
+## 3. Konfigurasi Monitoring
 
-3. Edit `config.sh` sesuai dengan kebutuhan Anda (opsional):
+1. Buat file `postgresql_monitoring.conf` dengan konten yang ada di README.md.
+2. Buat file `postgresql_monitoring_setup.sh` dengan konten yang ada di README.md.
+3. Berikan izin eksekusi pada file setup:
    ```
-   nano config.sh
+   chmod +x postgresql_monitoring_setup.sh
    ```
-
 4. Jalankan script setup:
    ```
-   sudo ./run_setup.sh
+   sudo ./postgresql_monitoring_setup.sh
    ```
 
-5. Ikuti petunjuk di layar untuk menyelesaikan proses setup.
+## 4. Verifikasi Konfigurasi Monitoring
 
-## Konfigurasi
+1. Masuk ke PostgreSQL sebagai user postgres:
+   ```
+   sudo -u postgres psql
+   ```
+2. Cek apakah view monitoring telah dibuat:
+   ```sql
+   \d log_view
+   ```
+3. Cek apakah fungsi monitoring telah dibuat:
+   ```sql
+   \df get_recent_logs
+   ```
+4. Keluar dari PostgreSQL:
+   ```sql
+   \q
+   ```
 
-Anda dapat mengubah konfigurasi default dengan mengedit file `config.sh`. Beberapa pengaturan yang dapat diubah meliputi:
+## 5. Setup Database Perpustakaan
 
-- Nama database
-- Nama pengguna dan kata sandi
-- Lokasi file log
+1. Buat file `library_database_setup.sql` dengan konten yang ada di README.md.
+2. Jalankan script SQL:
+   ```
+   sudo -u postgres psql -f library_database_setup.sql
+   ```
 
-## Logging
+## 6. Verifikasi Setup Database Perpustakaan
 
-Log dari proses setup disimpan di `/var/log/postgresql_setup.log` secara default. Anda dapat mengubah lokasi ini di `config.sh`.
+1. Masuk ke database library:
+   ```
+   sudo -u postgres psql -d library
+   ```
+2. Cek apakah tabel books telah dibuat:
+   ```sql
+   \d books
+   ```
+3. Cek apakah view book_summary telah dibuat:
+   ```sql
+   \d book_summary
+   ```
+4. Cek apakah stored procedure add_book telah dibuat:
+   ```sql
+   \df add_book
+   ```
+5. Cek apakah fungsi get_book_count_by_year telah dibuat:
+   ```sql
+   \df get_book_count_by_year
+   ```
 
-## Troubleshooting
+## 7. Penggunaan
 
-Jika Anda mengalami masalah saat menjalankan script:
+1. Tambahkan buku baru:
+   ```sql
+   CALL add_book('Pride and Prejudice', 'Jane Austen', 1813, '9780141439518');
+   ```
+2. Lihat semua buku:
+   ```sql
+   SELECT * FROM books;
+   ```
+3. Perbarui informasi buku:
+   ```sql
+   UPDATE books SET publication_year = 1961 WHERE id = 1;
+   ```
+4. Hapus buku:
+   ```sql
+   DELETE FROM books WHERE id = 2;
+   ```
+5. Lihat ringkasan buku:
+   ```sql
+   SELECT * FROM book_summary;
+   ```
+6. Hitung jumlah buku untuk tahun tertentu:
+   ```sql
+   SELECT get_book_count_by_year(1813);
+   ```
+7. Lihat log terbaru:
+   ```sql
+   SELECT * FROM get_recent_logs(10);
+   ```
 
-1. Pastikan Anda memiliki akses sudo.
-2. Periksa file log untuk informasi lebih detail tentang error.
-3. Pastikan semua dependensi telah terpenuhi.
+## 8. Akses Jarak Jauh (Opsional)
 
-## Kontribusi
+Jika Anda ingin mengakses database dari jarak jauh:
 
-Kontribusi untuk proyek ini sangat diterima. Silakan fork repositori ini, buat perubahan, dan ajukan pull request.
+1. Pastikan firewall Anda mengizinkan koneksi ke port 5432.
+2. Gunakan tool seperti pgAdmin atau psql untuk terhubung ke database menggunakan alamat IP server Anda.
 
-## Lisensi
+## 9. Keamanan
 
-Proyek ini dilisensikan di bawah [MIT License](LICENSE).
+1. Tinjau pengaturan di pg_hba.conf untuk membatasi akses hanya ke alamat IP yang dipercaya.
+2. Pertimbangkan untuk menggunakan SSL untuk enkripsi koneksi.
+3. Selalu gunakan password yang kuat untuk user database.
 
-## Kontak
-
-Jika Anda memiliki pertanyaan atau masalah, silakan buka issue di repositori GitHub ini.
+Selamat! Anda telah berhasil mengatur sistem monitoring PostgreSQL dan database perpustakaan. Pastikan untuk selalu menjaga keamanan sistem Anda dan melakukan backup secara teratur.
