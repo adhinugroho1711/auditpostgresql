@@ -2,13 +2,12 @@
 
 # Impor modul-modul
 source ./utils.sh
-source ./user_management.sh
 source ./installation.sh
-source ./monitoring.sh
-source ./library_database.sh
 source ./audit.sh
+source ./database.sh
 
 # Konfigurasi default
+PG_VERSION="14"
 PG_USER="postgres"
 PG_PASSWORD=""
 PG_DB="postgres"
@@ -28,33 +27,25 @@ while true; do
     show_banner
     echo "
 1. Instal dan Konfigurasi PostgreSQL
-2. Manajemen Pengguna dan Kredensial
-3. Konfigurasi Monitoring dan Audit
-4. Setup Database Perpustakaan
-5. Periksa Status PostgreSQL
-6. Keluar
+2. Konfigurasi Audit
+3. Buat Database Baru
+4. Keluar
 "
-    read -p "Pilih opsi (1-6): " choice
+    read -p "Pilih opsi (1-4): " choice
 
     case $choice in
         1)
             install_postgresql_and_pgaudit
-            configure_monitoring
+            configure_remote_access
             ;;
         2)
-            set_credentials
+            configure_pgaudit_all_databases
+            create_audit_trigger_function
             ;;
         3)
-            configure_monitoring
-            manage_audit
+            create_new_database
             ;;
         4)
-            setup_library_database
-            ;;
-        5)
-            check_postgresql_status  # Fungsi ini perlu ditambahkan di utils.sh
-            ;;
-        6)
             echo "Terima kasih telah menggunakan script ini."
             exit 0
             ;;

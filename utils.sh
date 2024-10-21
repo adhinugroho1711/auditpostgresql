@@ -30,19 +30,20 @@ verify_postgres_connection() {
     fi
 }
 
+# Fungsi untuk memeriksa status PostgreSQL
 check_postgresql_status() {
-    echo "Memeriksa status PostgreSQL..."
+    echo "Memeriksa status PostgreSQL $PG_VERSION..."
     if sudo systemctl is-active --quiet postgresql; then
-        echo "PostgreSQL sedang berjalan."
+        echo "PostgreSQL $PG_VERSION sedang berjalan."
         sudo systemctl status postgresql | grep Active
     else
-        echo "PostgreSQL tidak berjalan."
-        echo "Mencoba menjalankan PostgreSQL..."
+        echo "PostgreSQL $PG_VERSION tidak berjalan."
+        echo "Mencoba menjalankan PostgreSQL $PG_VERSION..."
         sudo systemctl start postgresql
         if sudo systemctl is-active --quiet postgresql; then
-            echo "PostgreSQL berhasil dijalankan."
+            echo "PostgreSQL $PG_VERSION berhasil dijalankan."
         else
-            echo "Gagal menjalankan PostgreSQL. Silakan periksa log sistem untuk informasi lebih lanjut."
+            echo "Gagal menjalankan PostgreSQL $PG_VERSION. Silakan periksa log sistem untuk informasi lebih lanjut."
         fi
     fi
 }

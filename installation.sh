@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Tetapkan versi PostgreSQL
-PG_VERSION="14"
-
 # Fungsi untuk memeriksa dan menginstal PostgreSQL
 check_and_install_postgresql() {
     if ! command -v psql &> /dev/null; then
@@ -13,9 +10,6 @@ check_and_install_postgresql() {
             error_exit "Gagal menginstal PostgreSQL. Silakan instal secara manual dan jalankan script ini kembali."
         fi
         echo "PostgreSQL $PG_VERSION berhasil diinstal."
-        
-        # Konfigurasi akses remote secara default
-        configure_remote_access
     else
         echo "PostgreSQL sudah terinstal."
     fi
@@ -28,14 +22,11 @@ configure_remote_access() {
     PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
     PGHBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
 
-    # Ubah postgresql.conf untuk mengizinkan koneksi dari semua alamat
     sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" $PGCONF
-
-    # Tambahkan aturan ke pg_hba.conf untuk mengizinkan akses remote
     echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a $PGHBA
-
-    # Buka port PostgreSQL di firewall
     sudo ufw allow 5432/tcp
+
+    restart_postgresql
 
     echo "Akses remote telah dikonfigurasi."
 }
@@ -46,7 +37,6 @@ install_postgresql_and_pgaudit() {
     
     check_and_install_postgresql
 
-    # Install pgaudit extension
     if apt-cache show postgresql-$PG_VERSION-pgaudit &> /dev/null; then
         sudo apt-get install -y postgresql-$PG_VERSION-pgaudit || error_exit "Gagal menginstal pgaudit extension"
     else
@@ -61,7 +51,6 @@ install_postgresql_and_pgaudit() {
         rm -rf pgaudit
     fi
 
-    # Tambahkan konfigurasi pgaudit ke postgresql.conf
     PGCONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
     if sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
         echo "pgaudit sudah terdaftar di shared_preload_libraries"
