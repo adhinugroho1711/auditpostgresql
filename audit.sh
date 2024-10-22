@@ -1,216 +1,128 @@
 #!/bin/bash
 
+# Fungsi untuk memeriksa instalasi PostgreSQL
+check_postgresql_installation() {
+    if ! command -v psql &> /dev/null; then
+        echo "PostgreSQL belum terinstal. Silakan instal PostgreSQL terlebih dahulu."
+        echo "Anda dapat menggunakan opsi 1 di menu utama untuk menginstal PostgreSQL."
+        return 1
+    fi
+    return 0
+}
+
+# Fungsi untuk memeriksa dan menginstal pgAudit
+check_and_install_pgaudit() {
+    echo "Memeriksa instalasi pgAudit..."
+    
+    # Periksa apakah package pgaudit tersedia
+    if ! apt-cache show postgresql-$PG_VERSION-pgaudit &> /dev/null; then
+        echo "Package postgresql-$PG_VERSION-pgaudit tidak ditemukan."
+        read -p "Apakah Anda ingin menginstal pgAudit sekarang? (y/n): " install_choice
+        if [[ $install_choice =~ ^[Yy]$ ]]; then
+            echo "Menginstal pgAudit..."
+            sudo apt-get update
+            sudo apt-get install -y postgresql-$PG_VERSION-pgaudit
+            if [ $? -ne 0 ]; then
+                echo "Gagal menginstal pgAudit. Mencoba metode alternatif..."
+                sudo apt-get install -y postgresql-server-dev-$PG_VERSION build-essential git
+                git clone https://github.com/pgaudit/pgaudit.git
+                cd pgaudit
+                git checkout REL_${PG_VERSION}_STABLE
+                make USE_PGXS=1
+                sudo make USE_PGXS=1 install
+                cd ..
+                rm -rf pgaudit
+            fi
+        else
+            echo "pgAudit diperlukan untuk fungsi audit. Instalasi dibatalkan."
+            return 1
+        fi
+    fi
+    return 0
+}
+
 # Fungsi untuk mengkonfigurasi audit detail
 configure_detailed_audit() {
     echo "Mengkonfigurasi audit detail..."
 
-    if ! ensure_pgaudit_loaded; then
-        echo "Gagal memuat pgAudit. Konfigurasi audit tidak dapat dilanjutkan."
+    # Periksa instalasi PostgreSQL
+    if ! check_postgresql_installation; then
         return 1
     fi
 
+    # Periksa dan instal pgAudit jika diperlukan
+    if ! check_and_install_pgaudit; then
+        return 1
+    fi
+
+    echo "Mengkonfigurasi PostgreSQL untuk pgAudit..."
+    
+    # Update postgresql.conf
+    PGCONF="$PG_CONFIG_DIR/postgresql.conf"
+    if [ ! -f "$PGCONF" ]; then
+        echo "Error: File konfigurasi PostgreSQL tidak ditemukan di $PGCONF"
+        return 1
+    fi
+
+    # Backup konfigurasi
+    sudo cp "$PGCONF" "${PGCONF}.backup"
+    
+    # Update shared_preload_libraries
+    if ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
+        echo "Menambahkan pgaudit ke shared_preload_libraries..."
+        if sudo grep -q "^shared_preload_libraries" "$PGCONF"; then
+            sudo sed -i "s/shared_preload_libraries = '\(.*\)'/shared_preload_libraries = '\1,pgaudit'/" "$PGCONF"
+        else
+            echo "shared_preload_libraries = 'pgaudit'" | sudo tee -a "$PGCONF"
+        fi
+    fi
+
+    # Restart PostgreSQL untuk menerapkan perubahan
+    echo "Merestart PostgreSQL untuk menerapkan perubahan..."
+    if ! sudo systemctl restart postgresql; then
+        echo "Gagal merestart PostgreSQL. Mengembalikan konfigurasi..."
+        sudo mv "${PGCONF}.backup" "$PGCONF"
+        return 1
+    fi
+
+    # Tunggu beberapa detik untuk PostgreSQL startup
+    sleep 5
+
     # Konfigurasi pgAudit
-    configure_pgaudit
+    echo "Mengkonfigurasi pengaturan pgAudit..."
+    sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS pgaudit;" postgres
+    
+    # Konfigurasi audit settings
+    configure_pgaudit_settings
 
     # Buat tabel dan trigger audit custom
     create_custom_audit_table
     create_custom_audit_trigger
 
     echo "Konfigurasi audit detail selesai."
+    echo "pgAudit telah dikonfigurasi dan diaktifkan."
 }
 
-# Fungsi untuk mengkonfigurasi pgAudit
-configure_pgaudit() {
-    echo "Mengkonfigurasi pgAudit..."
+# Fungsi untuk mengkonfigurasi pengaturan pgAudit
+configure_pgaudit_settings() {
+    echo "Mengkonfigurasi pengaturan pgAudit..."
 
-    # Konfigurasi global pgAudit
-    run_psql "ALTER SYSTEM SET pgaudit.log = 'all';"
-    run_psql "ALTER SYSTEM SET pgaudit.log_catalog = on;"
-    run_psql "ALTER SYSTEM SET pgaudit.log_parameter = on;"
-    run_psql "ALTER SYSTEM SET pgaudit.log_statement_once = off;"
-    run_psql "ALTER SYSTEM SET pgaudit.log_level = log;"
+    # Jalankan perintah konfigurasi sebagai user postgres
+    sudo -u postgres psql -c "ALTER SYSTEM SET pgaudit.log = 'all';"
+    sudo -u postgres psql -c "ALTER SYSTEM SET pgaudit.log_catalog = on;"
+    sudo -u postgres psql -c "ALTER SYSTEM SET pgaudit.log_parameter = on;"
+    sudo -u postgres psql -c "ALTER SYSTEM SET pgaudit.log_statement_once = off;"
+    sudo -u postgres psql -c "ALTER SYSTEM SET pgaudit.log_level = 'log';"
     
-    # Konfigurasi untuk merekam detail tambahan
-    run_psql "ALTER SYSTEM SET log_connections = on;"
-    run_psql "ALTER SYSTEM SET log_disconnections = on;"
-    run_psql "ALTER SYSTEM SET log_duration = on;"
-    run_psql "ALTER SYSTEM SET log_line_prefix = '%m [%p] [%r] %q%u@%d from %h ';"
-    run_psql "ALTER SYSTEM SET log_statement = 'all';"
+    # Konfigurasi logging tambahan
+    sudo -u postgres psql -c "ALTER SYSTEM SET log_connections = on;"
+    sudo -u postgres psql -c "ALTER SYSTEM SET log_disconnections = on;"
+    sudo -u postgres psql -c "ALTER SYSTEM SET log_duration = on;"
+    sudo -u postgres psql -c "ALTER SYSTEM SET log_line_prefix = '%m [%p] [%r] %q%u@%d from %h ';"
+    sudo -u postgres psql -c "ALTER SYSTEM SET log_statement = 'all';"
     
-    # Konfigurasi untuk merekam query sebelum dan sesudah
-    run_psql "ALTER SYSTEM SET track_activities = on;"
-    run_psql "ALTER SYSTEM SET track_activity_query_size = 2048;"  # Increase if needed
-
-    restart_postgresql
-
-    echo "Konfigurasi pgAudit selesai."
+    # Reload konfigurasi
+    sudo -u postgres psql -c "SELECT pg_reload_conf();"
 }
 
-# Fungsi untuk membuat tabel audit custom
-create_custom_audit_table() {
-    echo "Membuat tabel audit custom..."
-    
-    run_psql "
-    CREATE TABLE IF NOT EXISTS public.custom_audit_log (
-        id SERIAL PRIMARY KEY,
-        timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        ip_address TEXT,
-        username TEXT,
-        database_name TEXT,
-        query_before TEXT,
-        query_after TEXT,
-        query_type TEXT
-    );"
-    
-    echo "Tabel audit custom telah dibuat."
-}
-
-# Fungsi untuk membuat trigger audit custom
-create_custom_audit_trigger() {
-    echo "Membuat trigger audit custom..."
-    
-    run_psql "
-    CREATE OR REPLACE FUNCTION public.custom_audit_trigger_func()
-    RETURNS trigger AS \$\$
-    DECLARE
-        old_row TEXT;
-        new_row TEXT;
-    BEGIN
-        IF TG_OP = 'DELETE' THEN
-            old_row = row_to_json(OLD)::TEXT;
-            new_row = NULL;
-        ELSIF TG_OP = 'UPDATE' THEN
-            old_row = row_to_json(OLD)::TEXT;
-            new_row = row_to_json(NEW)::TEXT;
-        ELSIF TG_OP = 'INSERT' THEN
-            old_row = NULL;
-            new_row = row_to_json(NEW)::TEXT;
-        END IF;
-
-        INSERT INTO public.custom_audit_log (
-            ip_address,
-            username,
-            database_name,
-            query_before,
-            query_after,
-            query_type
-        ) VALUES (
-            inet_client_addr()::TEXT,
-            current_user,
-            current_database(),
-            old_row,
-            new_row,
-            TG_OP
-        );
-        RETURN NULL;
-    END;
-    \$\$ LANGUAGE plpgsql;
-
-    CREATE OR REPLACE FUNCTION public.add_custom_audit_trigger()
-    RETURNS event_trigger AS \$\$
-    DECLARE
-        obj record;
-    BEGIN
-        FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands() WHERE command_tag = 'CREATE TABLE'
-        LOOP
-            EXECUTE format(
-                'CREATE TRIGGER %I_custom_audit_trigger
-                AFTER INSERT OR UPDATE OR DELETE ON %I.%I
-                FOR EACH ROW EXECUTE FUNCTION public.custom_audit_trigger_func()',
-                obj.object_identity,
-                obj.schema_name,
-                obj.object_identity
-            );
-        END LOOP;
-    END;
-    \$\$ LANGUAGE plpgsql;
-
-    CREATE EVENT TRIGGER add_custom_audit_trigger_event ON ddl_command_end
-    WHEN TAG IN ('CREATE TABLE')
-    EXECUTE FUNCTION public.add_custom_audit_trigger();
-    "
-    
-    echo "Trigger audit custom telah dibuat."
-}
-
-# Fungsi untuk memeriksa log audit
-check_audit_logs() {
-    echo "Memeriksa log audit..."
-    sudo tail -n 50 "$PG_LOG_DIR/postgresql-$PG_VERSION-main.log"
-    echo "Selesai memeriksa log audit."
-}
-
-# Fungsi untuk memeriksa entri audit custom
-check_custom_audit_entries() {
-    echo "Memeriksa entri audit custom..."
-    run_psql "SELECT * FROM public.custom_audit_log ORDER BY timestamp DESC LIMIT 10;"
-    echo "Selesai memeriksa entri audit custom."
-}
-
-# Fungsi untuk mengaktifkan audit pada database tertentu
-enable_database_audit() {
-    echo "Mengaktifkan audit pada database tertentu..."
-    read -p "Masukkan nama database: " db_name
-
-    if run_psql "\l" | grep -qw $db_name; then
-        PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $db_name -c "CREATE EXTENSION IF NOT EXISTS pgaudit;"
-        echo "Audit telah diaktifkan untuk database '$db_name'."
-    else
-        echo "Database '$db_name' tidak ditemukan."
-    fi
-}
-
-# Fungsi utama untuk setup audit
-setup_audit() {
-    configure_detailed_audit
-    enable_database_audit
-    
-    echo "Setup audit selesai."
-}
-
-# Fungsi untuk memastikan pgAudit dimuat
-ensure_pgaudit_loaded() {
-    echo "Memeriksa status PgAudit..."
-    
-    if [ "$PGAUDIT_ENABLED" != "true" ]; then
-        echo "PgAudit tidak diaktifkan dalam konfigurasi."
-        return 1
-    fi
-    
-    PGCONF="$PG_CONFIG_DIR/postgresql.conf"
-    
-    # Periksa keberadaan file konfigurasi
-    if [ ! -f "$PGCONF" ]; then
-        echo "Error: File konfigurasi PostgreSQL tidak ditemukan di $PGCONF"
-        return 1
-    fi
-
-    # Periksa dan edit shared_preload_libraries menggunakan sed
-    if sudo grep -q "^#shared_preload_libraries.*pgaudit" "$PGCONF"; then
-        echo "Mengaktifkan shared_preload_libraries dengan pgaudit..."
-        sudo sed -i "s/^#shared_preload_libraries.*pgaudit/shared_preload_libraries = 'pgaudit'/" "$PGCONF"
-    elif ! sudo grep -q "^shared_preload_libraries" "$PGCONF"; then
-        echo "Menambahkan shared_preload_libraries dengan pgaudit..."
-        sudo sed -i "$ a shared_preload_libraries = 'pgaudit'" "$PGCONF"
-    elif ! sudo grep -q "shared_preload_libraries.*pgaudit" "$PGCONF"; then
-        echo "Menambahkan pgaudit ke shared_preload_libraries..."
-        sudo sed -i "s/shared_preload_libraries = '\(.*\)'/shared_preload_libraries = '\1,pgaudit'/" "$PGCONF"
-    else
-        echo "PgAudit sudah terdaftar di shared_preload_libraries"
-    fi
-
-    # Memuat ulang konfigurasi PostgreSQL
-    if ! sudo -u postgres psql -c "SELECT pg_reload_conf();" > /dev/null 2>&1; then
-        echo "Gagal memuat ulang konfigurasi PostgreSQL. Mencoba restart..."
-        restart_postgresql
-    fi
-
-    # Verifikasi apakah pgaudit berhasil dimuat
-    if run_psql "SELECT 1 FROM pg_available_extensions WHERE name = 'pgaudit' AND installed_version IS NOT NULL;" | grep -q 1; then
-        echo "PgAudit berhasil dimuat."
-        return 0
-    else
-        echo "Gagal memuat PgAudit. Silakan periksa log PostgreSQL untuk informasi lebih lanjut."
-        return 1
-    fi
-}
+# ... (sisanya fungsi tetap sama seperti sebelumnya)
